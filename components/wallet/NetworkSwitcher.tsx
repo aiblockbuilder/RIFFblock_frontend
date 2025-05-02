@@ -4,9 +4,11 @@ import { useState, useEffect } from "react"
 import { Check, ChevronDown, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { useWalletContext } from "@/components/wallet/WalletProvider"
-import { SUPPORTED_NETWORKS } from "@/lib/types/wallet"
 import Image from "next/image"
+import { useWeb3Modal } from "@web3modal/wagmi/react"
+import { useAccount, useChainId, useSwitchChain } from "wagmi"
+import { SUPPORTED_NETWORKS, getNetworkInfo } from "@/lib/walletConfig"
+import { mainnet, polygon, arbitrum, optimism } from "wagmi/chains"
 
 interface NetworkSwitcherProps {
     onNetworkChange?: (chainId: number) => void
@@ -26,8 +28,16 @@ export default function NetworkSwitcher({
     const [isClient, setIsClient] = useState(false)
     const [isWrongNetwork, setIsWrongNetwork] = useState(false)
 
-    // Use our wallet context
-    const { chainId, isConnected, switchNetwork, isSwitchingNetwork } = useWalletContext()
+    // Web3Modal hook
+    const { open } = useWeb3Modal()
+
+    // Wagmi hooks
+    const { isConnected } = useAccount()
+    const chainId = useChainId()
+    const { switchChain, isPending: isSwitchingNetwork, error } = useSwitchChain()
+
+    // Available chains
+    const chains = [mainnet, polygon, arbitrum, optimism]
 
     useEffect(() => {
         setIsClient(true)
@@ -42,10 +52,24 @@ export default function NetworkSwitcher({
         }
     }, [chainId, defaultChainId, isConnected, onNetworkChange])
 
+    // Handle errors
+    useEffect(() => {
+        if (error) {
+            console.error("Network switch error:", error)
+        }
+    }, [error])
+
     // Get network info
-    const getCurrentNetwork = () => {
-        if (!chainId) return SUPPORTED_NETWORKS[defaultChainId]
-        return SUPPORTED_NETWORKS[chainId] || { name: `Chain ID: ${chainId}`, icon: "" }
+    const currentNetwork = getNetworkInfo(chainId)
+
+    // Handle network switch
+    const handleNetworkSwitch = (newChainId: number) => {
+        if (isConnected) {
+            switchChain({ chainId: newChainId })
+        } else {
+            // If not connected, open the wallet modal
+            open({ view: "Networks" })
+        }
     }
 
     // If not client-side yet, show loading state
@@ -67,7 +91,7 @@ export default function NetworkSwitcher({
                 variant="destructive"
                 size={size}
                 className={`bg-amber-600 hover:bg-amber-700 text-white ${className}`}
-                onClick={() => switchNetwork(defaultChainId)}
+                onClick={() => handleNetworkSwitch(defaultChainId)}
             >
                 <div className="flex items-center gap-2">
                     <AlertCircle className="h-4 w-4" />
@@ -78,8 +102,6 @@ export default function NetworkSwitcher({
     }
 
     // Normal network switcher dropdown
-    const currentNetwork = getCurrentNetwork()
-
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -108,7 +130,7 @@ export default function NetworkSwitcher({
                     <DropdownMenuItem
                         key={network.chainId}
                         className="cursor-pointer"
-                        onClick={() => switchNetwork(network.chainId)}
+                        onClick={() => handleNetworkSwitch(network.chainId)}
                         disabled={chainId === network.chainId}
                     >
                         <div className="flex items-center gap-2 w-full">
