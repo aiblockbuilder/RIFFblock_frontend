@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Wallet, ChevronDown, Copy, ExternalLink, LogOut } from "lucide-react"
@@ -14,11 +13,10 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { toast } from "@/components/ui/use-toast"
-import { useWalletContext } from "@/components/wallet/WalletProvider"
 import Image from "next/image"
-import { SUPPORTED_NETWORKS } from "@/lib/types/wallet"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { useConnect } from "wagmi"
+import { useWeb3Modal } from "@web3modal/wagmi/react"
+import { useAccount, useBalance, useDisconnect, useChainId, useEnsName, useEnsAvatar } from "wagmi"
+import { formatAddress, getNetworkInfo } from "@/lib/walletConfig"
 
 interface WalletConnectProps {
     variant?: "default" | "outline"
@@ -38,25 +36,34 @@ export default function WalletConnect({
     customConnectedButton,
 }: WalletConnectProps) {
     const [isMounted, setIsMounted] = useState(false)
-    const [isModalOpen, setIsModalOpen] = useState(false)
-    const [connectingConnector, setConnectingConnector] = useState<string | null>(null)
 
-    const { address, chainId, isConnected, balance, networkName, disconnect, formatAddress } = useWalletContext()
+    // Web3Modal hook
+    const { open } = useWeb3Modal()
 
-    const { connect, connectors, isLoading, pendingConnector } = useConnect({
-        onSuccess: () => {
-            setIsModalOpen(false)
-            setConnectingConnector(null)
+    // Wagmi hooks
+    const { address, isConnected } = useAccount({
+        onConnect: () => {
+            if (onConnected) onConnected()
         },
-        onError: (error) => {
-            console.error("Connection error:", error)
-            toast({
-                title: "Connection Failed",
-                description: error.message || "Failed to connect wallet",
-                variant: "destructive",
-            })
-            setConnectingConnector(null)
+        onDisconnect: () => {
+            if (onDisconnected) onDisconnected()
         },
+    })
+    const chainId = useChainId()
+    const { disconnect } = useDisconnect()
+    const { data: balanceData } = useBalance({
+        address,
+    })
+
+    // ENS integration
+    const { data: ensName } = useEnsName({
+        address,
+        chainId: 1, // ENS is only on Ethereum mainnet
+    })
+
+    const { data: ensAvatar } = useEnsAvatar({
+        name: ensName,
+        chainId: 1, // ENS is only on Ethereum mainnet
     })
 
     // Set mounted state for client-side rendering
@@ -64,15 +71,6 @@ export default function WalletConnect({
         setIsMounted(true)
         return () => setIsMounted(false)
     }, [])
-
-    // Effect for handling connection status changes
-    useEffect(() => {
-        if (isConnected) {
-            if (onConnected) onConnected()
-        } else {
-            if (onDisconnected && isMounted) onDisconnected()
-        }
-    }, [isConnected, onConnected, onDisconnected, isMounted])
 
     // Copy address to clipboard
     const copyAddress = () => {
@@ -89,24 +87,21 @@ export default function WalletConnect({
     const viewOnExplorer = () => {
         if (!address || !chainId) return
 
-        const explorerUrl = SUPPORTED_NETWORKS[chainId]?.blockExplorer || "https://etherscan.io"
-        window.open(`${explorerUrl}/address/${address}`, "_blank")
+        const networkInfo = getNetworkInfo(chainId)
+        window.open(`${networkInfo.blockExplorer}/address/${address}`, "_blank")
     }
 
-    // Get currency symbol based on network
-    const getCurrencySymbol = () => {
-        if (!chainId) return "ETH"
-        return SUPPORTED_NETWORKS[chainId]?.symbol || "ETH"
+    // Handle disconnect
+    const handleDisconnect = () => {
+        disconnect()
+        toast({
+            title: "Wallet Disconnected",
+            description: "Your wallet has been disconnected",
+        })
     }
 
-    // Handle wallet connection
-    const handleConnect = (connectorId: string) => {
-        const connector = connectors.find((c) => c.id === connectorId)
-        if (!connector) return
-
-        setConnectingConnector(connectorId)
-        connect({ connector })
-    }
+    // Display name (ENS or formatted address)
+    const displayName = ensName || (address ? formatAddress(address) : "")
 
     // If not client-side yet, show nothing
     if (!isMounted) {
@@ -119,6 +114,9 @@ export default function WalletConnect({
             return customConnectedButton
         }
 
+        const networkInfo = getNetworkInfo(chainId)
+        const formattedBalance = balanceData ? Number.parseFloat(balanceData.formatted).toFixed(4) : "0.00"
+
         return (
             <>
                 <DropdownMenu>
@@ -129,16 +127,24 @@ export default function WalletConnect({
                             className={`bg-gradient-to-r from-violet-600/90 to-blue-500/90 hover:from-violet-700/90 hover:to-blue-600/90 ${className}`}
                         >
                             <div className="flex items-center gap-2">
-                                {chainId && SUPPORTED_NETWORKS[chainId]?.icon && (
+                                {ensAvatar ? (
                                     <Image
-                                        src={SUPPORTED_NETWORKS[chainId].icon || "/placeholder.svg"}
-                                        alt={networkName || "Network"}
+                                        src={ensAvatar || "/placeholder.svg"}
+                                        alt={ensName || "ENS Avatar"}
                                         width={16}
                                         height={16}
                                         className="rounded-full"
                                     />
-                                )}
-                                <span>{formatAddress(address)}</span>
+                                ) : networkInfo.icon ? (
+                                    <Image
+                                        src={networkInfo.icon || "/placeholder.svg"}
+                                        alt={networkInfo.name}
+                                        width={16}
+                                        height={16}
+                                        className="rounded-full"
+                                    />
+                                ) : null}
+                                <span>{displayName}</span>
                                 <ChevronDown className="h-4 w-4" />
                             </div>
                         </Button>
@@ -147,14 +153,26 @@ export default function WalletConnect({
                         <DropdownMenuLabel>
                             <div className="flex flex-col">
                                 <span className="text-sm font-normal text-zinc-400">Connected Wallet</span>
-                                <span className="font-medium">{formatAddress(address)}</span>
+                                <div className="flex items-center gap-2">
+                                    {ensAvatar && (
+                                        <Image
+                                            src={ensAvatar || "/placeholder.svg"}
+                                            alt={ensName || "ENS Avatar"}
+                                            width={16}
+                                            height={16}
+                                            className="rounded-full"
+                                        />
+                                    )}
+                                    <span className="font-medium">{displayName}</span>
+                                </div>
+                                {ensName && address && <span className="text-xs text-zinc-500 mt-1">{formatAddress(address)}</span>}
                             </div>
                         </DropdownMenuLabel>
                         <DropdownMenuSeparator className="bg-zinc-800" />
                         <DropdownMenuLabel>
                             <div className="flex flex-col">
                                 <span className="text-sm font-normal text-zinc-400">Network</span>
-                                <span className="font-medium">{networkName || "Unknown"}</span>
+                                <span className="font-medium">{networkInfo.name || "Unknown"}</span>
                             </div>
                         </DropdownMenuLabel>
                         <DropdownMenuSeparator className="bg-zinc-800" />
@@ -162,7 +180,7 @@ export default function WalletConnect({
                             <div className="flex flex-col">
                                 <span className="text-sm font-normal text-zinc-400">Balance</span>
                                 <span className="font-medium">
-                                    {balance || "0.00"} {getCurrencySymbol()}
+                                    {formattedBalance} {networkInfo.symbol}
                                 </span>
                             </div>
                         </DropdownMenuLabel>
@@ -176,7 +194,7 @@ export default function WalletConnect({
                             <span>View on Explorer</span>
                         </DropdownMenuItem>
                         <DropdownMenuSeparator className="bg-zinc-800" />
-                        <DropdownMenuItem onClick={disconnect} className="text-red-500 cursor-pointer">
+                        <DropdownMenuItem onClick={handleDisconnect} className="text-red-500 cursor-pointer">
                             <LogOut className="mr-2 h-4 w-4" />
                             <span>Disconnect</span>
                         </DropdownMenuItem>
@@ -188,78 +206,19 @@ export default function WalletConnect({
 
     // If not connected, show connect button
     return (
-        <>
-            <Button
-                variant={variant === "default" ? "default" : "outline"}
-                size={size}
-                className={`${variant === "default"
-                        ? "bg-gradient-to-r from-violet-600/90 to-blue-500/90 hover:from-violet-700/90 hover:to-blue-600/90"
-                        : "border-violet-500/50 text-violet-500 hover:bg-violet-500/10"
-                    } ${className}`}
-                onClick={() => setIsModalOpen(true)}
-                disabled={isLoading}
-            >
-                {isLoading ? (
-                    <div className="flex items-center gap-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-b-transparent border-white"></div>
-                        <span>Connecting...</span>
-                    </div>
-                ) : (
-                    <div className="flex items-center gap-2">
-                        <Wallet className="h-4 w-4" />
-                        <span>Connect Wallet</span>
-                    </div>
-                )}
-            </Button>
-
-            {/* Wallet Selection Modal */}
-            <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                <DialogContent className="sm:max-w-md bg-zinc-900 border-zinc-800 text-white">
-                    <DialogHeader>
-                        <DialogTitle className="text-center text-xl font-bold">Connect Wallet</DialogTitle>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        {connectors.map((connector) => {
-                            const isMetaMask = connector.id === "metaMask"
-                            const isWalletConnect = connector.id === "walletConnect"
-
-                            if (!isMetaMask && !isWalletConnect) return null
-
-                            return (
-                                <Button
-                                    key={connector.id}
-                                    variant="outline"
-                                    className="flex items-center justify-between p-6 h-auto border-zinc-700 hover:border-violet-500 hover:bg-zinc-800"
-                                    onClick={() => handleConnect(connector.id)}
-                                    disabled={!connector.ready || isLoading}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <Image
-                                            src={isMetaMask ? "/images/metamask-logo.png" : "/images/walletconnect-logo.png"}
-                                            alt={connector.name}
-                                            width={32}
-                                            height={32}
-                                            className="rounded-md"
-                                        />
-                                        <div className="text-left">
-                                            <div className="font-semibold">{connector.name}</div>
-                                            <div className="text-xs text-zinc-400">
-                                                {isMetaMask ? "Connect using browser extension" : "Connect using mobile wallet"}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {isLoading && connectingConnector === connector.id && (
-                                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-b-transparent border-violet-500"></div>
-                                    )}
-                                </Button>
-                            )
-                        })}
-                    </div>
-                    <div className="text-center text-xs text-zinc-500 mt-2">
-                        By connecting your wallet, you agree to our Terms of Service and Privacy Policy
-                    </div>
-                </DialogContent>
-            </Dialog>
-        </>
+        <Button
+            variant={variant === "default" ? "default" : "outline"}
+            size={size}
+            className={`${variant === "default"
+                ? "bg-gradient-to-r from-violet-600/90 to-blue-500/90 hover:from-violet-700/90 hover:to-blue-600/90"
+                : "border-violet-500/50 text-violet-500 hover:bg-violet-500/10"
+                } ${className}`}
+            onClick={() => open()}
+        >
+            <div className="flex items-center gap-2">
+                <Wallet className="h-4 w-4" />
+                <span>Connect Wallet</span>
+            </div>
+        </Button>
     )
 }

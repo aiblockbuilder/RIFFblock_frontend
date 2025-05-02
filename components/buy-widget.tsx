@@ -10,7 +10,10 @@ import { Wallet, CreditCard, ArrowRight, AlertCircle } from "lucide-react"
 import Image from "next/image"
 import { toast } from "@/components/ui/use-toast"
 import WalletConnect from "@/components/wallet/WalletConnect"
-import { useWalletContext } from "@/components/wallet/WalletProvider"
+import { useAccount, useChainId, useSwitchChain, useWriteContract } from "wagmi"
+
+// Mock RIFF token address - replace with actual address when deployed
+const RIFF_TOKEN_ADDRESS = "0x1234567890123456789012345678901234567890" as const
 
 // Payment methods configuration
 interface PaymentMethod {
@@ -62,9 +65,13 @@ export default function BuyWidget() {
   const [riffAmount, setRiffAmount] = useState("23,809.52")
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>(CRYPTO_PAYMENT_METHODS[2]) // Default to MATIC
   const [isWrongNetwork, setIsWrongNetwork] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
 
-  // Use our wallet context
-  const { chainId, isConnected, switchNetwork } = useWalletContext()
+  // Use wagmi hooks
+  const { isConnected, address } = useAccount()
+  const chainId = useChainId()
+  const { switchChain, isPending: isSwitchingChain, error: switchChainError } = useSwitchChain()
+  const { writeContractAsync, isPending: isWritePending, error: writeError } = useWriteContract()
 
   // Update network status when chainId changes
   useEffect(() => {
@@ -73,6 +80,27 @@ export default function BuyWidget() {
       setIsWrongNetwork(selectedPaymentMethod.networkId !== 0 && chainId !== selectedPaymentMethod.networkId)
     }
   }, [chainId, selectedPaymentMethod.networkId, isConnected])
+
+  // Handle errors
+  useEffect(() => {
+    if (switchChainError) {
+      console.error("Network switch error:", switchChainError)
+      toast({
+        title: "Network Switch Failed",
+        description: "Failed to switch network. Please try again or switch manually in your wallet.",
+        variant: "destructive",
+      })
+    }
+
+    if (writeError) {
+      console.error("Contract write error:", writeError)
+      toast({
+        title: "Transaction Failed",
+        description: "Failed to process your transaction. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }, [switchChainError, writeError])
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/[^0-9.]/g, "")
@@ -120,13 +148,13 @@ export default function BuyWidget() {
 
     // For EVM networks, check if we need to switch networks
     if (isConnected && chainId !== method.networkId && method.networkId !== 0) {
-      switchNetwork(method.networkId)
+      switchChain({ chainId: method.networkId })
     }
   }
 
   // Handle purchase with connected wallet
-  const handlePurchase = () => {
-    if (!isConnected) {
+  const handlePurchase = async () => {
+    if (!isConnected || !address) {
       return
     }
 
@@ -139,11 +167,45 @@ export default function BuyWidget() {
       return
     }
 
-    // In a real implementation, this would interact with a smart contract
-    toast({
-      title: "Purchase Initiated",
-      description: `Purchase of ${riffAmount} RIFF tokens initiated!`,
-    })
+    try {
+      setIsProcessing(true)
+
+      // In a real implementation, this would call a contract function to purchase tokens
+      // This is a mock implementation for demonstration purposes
+
+      // Example of how you would call a contract function:
+      // const hash = await writeContractAsync({
+      //   address: RIFF_TOKEN_ADDRESS,
+      //   abi: [
+      //     {
+      //       name: 'buyTokens',
+      //       type: 'function',
+      //       inputs: [],
+      //       outputs: [],
+      //       stateMutability: 'payable',
+      //     }
+      //   ],
+      //   functionName: 'buyTokens',
+      //   value: parseEther(amount),
+      // })
+
+      // Simulate transaction delay
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+
+      toast({
+        title: "Purchase Successful",
+        description: `Successfully purchased ${riffAmount} RIFF tokens!`,
+      })
+    } catch (error) {
+      console.error("Purchase error:", error)
+      toast({
+        title: "Purchase Failed",
+        description: "There was an error processing your purchase. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
   return (
@@ -172,9 +234,8 @@ export default function BuyWidget() {
               <Button
                 key={method.id}
                 variant="outline"
-                className={`border-zinc-800 bg-zinc-900 hover:bg-zinc-800 hover:text-white flex flex-col items-center p-3 h-auto ${
-                  selectedPaymentMethod.id === method.id ? "border-violet-500 bg-violet-500/10" : ""
-                }`}
+                className={`border-zinc-800 bg-zinc-900 hover:bg-zinc-800 hover:text-white flex flex-col items-center p-3 h-auto ${selectedPaymentMethod.id === method.id ? "border-violet-500 bg-violet-500/10" : ""
+                  }`}
                 onClick={() => handlePaymentMethodSelect(method)}
               >
                 <Image
@@ -197,7 +258,7 @@ export default function BuyWidget() {
                 <Button
                   variant="link"
                   className="h-auto p-0 text-amber-400"
-                  onClick={() => switchNetwork(selectedPaymentMethod.networkId)}
+                  onClick={() => switchChain({ chainId: selectedPaymentMethod.networkId })}
                 >
                   Switch network
                 </Button>
@@ -251,17 +312,21 @@ export default function BuyWidget() {
             {isConnected ? (
               <Button
                 onClick={handlePurchase}
-                className={`w-full ${
-                  isWrongNetwork
-                    ? "bg-zinc-700 hover:bg-zinc-600 cursor-not-allowed"
-                    : "bg-gradient-to-r from-violet-600 to-blue-500 hover:from-violet-700 hover:to-blue-600"
-                } text-white`}
-                disabled={isWrongNetwork}
+                className={`w-full ${isWrongNetwork || isWritePending || isProcessing || isSwitchingChain
+                  ? "bg-zinc-700 hover:bg-zinc-600 cursor-not-allowed"
+                  : "bg-gradient-to-r from-violet-600 to-blue-500 hover:from-violet-700 hover:to-blue-600"
+                  } text-white`}
+                disabled={isWrongNetwork || isWritePending || isProcessing || isSwitchingChain}
               >
                 {isWrongNetwork ? (
                   <span className="flex items-center gap-2">
                     <AlertCircle className="h-4 w-4" />
                     Switch Network First
+                  </span>
+                ) : isWritePending || isProcessing || isSwitchingChain ? (
+                  <span className="flex items-center gap-2">
+                    <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Processing...
                   </span>
                 ) : (
                   <span className="flex items-center gap-2">
