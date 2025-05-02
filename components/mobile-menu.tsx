@@ -5,8 +5,7 @@ import Link from "next/link"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { Menu, X, Disc } from "lucide-react"
-import WalletConnect from "@/components/wallet/WalletConnect"
-import NetworkSwitcher from "@/components/wallet/NetworkSwitcher"
+import WalletConnect from "@/components/wallet-connect"
 
 interface MobileMenuProps {
   links: {
@@ -55,8 +54,6 @@ export default function MobileMenu({ links }: MobileMenuProps) {
               ))}
             </ul>
             <div className="mt-8 space-y-4">
-              {/* Add Network Switcher to mobile menu */}
-              <NetworkSwitcher className="w-full" />
               {/* Add WalletConnect to mobile menu */}
               <WalletConnect className="w-full" />
               <Button

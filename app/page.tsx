@@ -12,8 +12,7 @@ import FlowingBackground from "@/components/flowing-background"
 import SectionTransition from "@/components/section-transition"
 import FloatingShapes from "@/components/floating-shapes"
 import WaveAnimation from "@/components/wave-animation"
-import WalletConnect from "@/components/wallet/WalletConnect"
-import NetworkSwitcher from "@/components/wallet/NetworkSwitcher"
+import WalletConnect from "@/components/wallet-connect"
 
 export default function RIFFblockLanding() {
   const navLinks = [
@@ -52,11 +51,7 @@ export default function RIFFblockLanding() {
             ))}
           </nav>
           <div className="flex items-center gap-4">
-            {/* Add Network Switcher */}
-            <div className="hidden lg:block">
-              <NetworkSwitcher variant="outline" />
-            </div>
-            {/* Wallet Connect */}
+            {/* Replace static button with WalletConnect component */}
             <div className="hidden md:block">
               <WalletConnect variant="outline" />
             </div>
@@ -74,7 +69,7 @@ export default function RIFFblockLanding() {
           {/* Image Background */}
           <div className="absolute inset-0 z-0">
             <Image
-              src="/images/hero-background.png"
+              src="/images/hero-background.jpg"
               alt="RIFFblock background"
               fill
               priority
