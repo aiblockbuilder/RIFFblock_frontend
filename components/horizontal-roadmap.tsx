@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { motion } from "framer-motion"
-import { Coins, ShoppingCart, Users } from "lucide-react"
+import { Coins, ShoppingCart, Handshake } from "lucide-react"
 
 export default function HorizontalRoadmap() {
   const [hoveredCard, setHoveredCard] = useState<number | null>(null)
@@ -28,7 +28,7 @@ export default function HorizontalRoadmap() {
       phase: "Phase 3",
       title: "Collaboration & Staking",
       description: "Staking mechanism, royalty distribution system, governance features, and cross-chain integration.",
-      icon: Users,
+      icon: Handshake,
       status: "upcoming",
       date: "Q4 2025",
     },
