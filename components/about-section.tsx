@@ -10,18 +10,21 @@ export default function AboutSection() {
       description: "Upload your musical ideas",
       icon: Upload,
       color: "violet",
+      borderColor: "border-violet-500/50"
     },
     {
       title: "Mint",
       description: "Create NFTs from your music",
       icon: Disc,
       color: "blue",
+      borderColor: "border-blue-500/50"
     },
     {
       title: "Monetize",
       description: "Earn from your creativity",
       icon: Coins,
       color: "indigo",
+      borderColor: "border-indigo-500/50"
     },
   ]
 
@@ -77,7 +80,7 @@ export default function AboutSection() {
                         ? "0 10px 25px -5px rgba(59, 130, 246, 0.3)"
                         : "0 10px 25px -5px rgba(99, 102, 241, 0.3)",
                 }}
-                className={`bg-zinc-900/50 backdrop-blur-sm p-6 rounded-xl border border-zinc-800 hover:border-${step.color}-500/50 transition-all w-[30%]`}
+                className={`bg-zinc-900/50 backdrop-blur-sm p-6 rounded-xl border border-zinc-800 hover:${step.borderColor} transition-all w-[30%]`}
               >
                 <div className="flex flex-col items-center text-center">
                   <div
