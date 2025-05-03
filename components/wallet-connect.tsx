@@ -28,14 +28,14 @@ interface WalletConnectProps {
   customConnectedButton?: React.ReactNode
 }
 
-export default function WalletConnect({
+const WalletConnect = ({
   variant = "default",
   size = "default",
   className = "",
   onConnected,
   onDisconnected,
   customConnectedButton,
-}: WalletConnectProps) {
+}: WalletConnectProps) => {
   const [isConnecting, setIsConnecting] = useState(false)
   const [isConnected, setIsConnected] = useState(false)
   const [walletAddress, setWalletAddress] = useState("")
@@ -355,3 +355,5 @@ export default function WalletConnect({
     </>
   )
 }
+
+export default WalletConnect
