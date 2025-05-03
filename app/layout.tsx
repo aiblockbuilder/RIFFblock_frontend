@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
+import { WalletProvider } from "@/contexts/wallet-context"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
   title: "RIFFblock - Own the Future of Music",
   description:
     "RIFFblock is revolutionizing how artists create, distribute, and monetize music through blockchain technology.",
-    generator: 'v0.dev'
+  generator: 'v0.dev'
 }
 
 export default function RootLayout({
@@ -21,8 +22,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        {children}
-        <Toaster />
+        <WalletProvider>
+          {children}
+          <Toaster />
+        </WalletProvider>
       </body>
     </html>
   )

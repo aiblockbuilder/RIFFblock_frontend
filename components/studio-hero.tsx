@@ -106,15 +106,6 @@ export default function StudioHero() {
                   <div className="w-2 h-2 rounded-full bg-green-500"></div>
                   <span className="text-xs text-zinc-400">FEATURED ARTIST • MOST RIFF TIPS</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    className="w-6 h-6 rounded-full bg-violet-600/50 hover:bg-violet-500/60 flex items-center justify-center transition-colors"
-                    onClick={() => setIsPlaying(!isPlaying)}
-                    aria-label={isPlaying ? "Pause" : "Play"}
-                  >
-                    {isPlaying ? <Pause size={12} /> : <Play size={12} />}
-                  </button>
-                </div>
               </div>
 
               {/* Artist content */}
@@ -232,6 +223,16 @@ export default function StudioHero() {
           {/* Mixing console visualization */}
           <div className="mt-8 w-full max-w-5xl">
             <div className="relative h-16 bg-zinc-900/70 backdrop-blur-md rounded-lg border border-zinc-800/50 overflow-hidden">
+              {/* Play/Pause button */}
+              <div className="absolute left-4 top-1/2 transform -translate-y-1/2 z-10">
+                <button
+                  className="w-10 h-10 rounded-full bg-gradient-to-r from-violet-600 to-blue-500 hover:from-violet-700 hover:to-blue-600 flex items-center justify-center transition-colors shadow-lg shadow-violet-900/30"
+                  onClick={() => setIsPlaying(!isPlaying)}
+                  aria-label={isPlaying ? "Pause" : "Play"}
+                >
+                  {isPlaying ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}
+                </button>
+              </div>
               {/* Fader visualization */}
               <div className="absolute inset-0 flex items-center justify-center gap-2 px-4">
                 {[...Array(12)].map((_, i) => (
@@ -250,7 +251,7 @@ export default function StudioHero() {
               </div>
 
               {/* Progress bar */}
-              <div className="absolute bottom-2 left-4 right-4">
+              <div className="absolute bottom-2 left-16 right-4">
                 <div className="flex items-center justify-between text-xs text-zinc-400 mb-1">
                   <span>{formatTime(currentTime)}</span>
                   <span>2:30</span>

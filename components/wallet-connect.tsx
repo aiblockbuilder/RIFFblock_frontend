@@ -16,8 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { toast } from "@/components/ui/use-toast"
 
-// Supported wallet types
-type WalletType = "metamask" | "walletconnect" | null
+import { useWallet } from "@/contexts/wallet-context"
 
 interface WalletConnectProps {
   variant?: "default" | "outline"
@@ -36,16 +35,9 @@ const WalletConnect = ({
   onDisconnected,
   customConnectedButton,
 }: WalletConnectProps) => {
-  const [isConnecting, setIsConnecting] = useState(false)
-  const [isConnected, setIsConnected] = useState(false)
-  const [walletAddress, setWalletAddress] = useState("")
-  const [walletType, setWalletType] = useState<WalletType>(null)
-  const [walletBalance, setWalletBalance] = useState("0.00")
+  const { isConnecting, isConnected, walletAddress, walletType, walletBalance, connectWallet, disconnectWallet } = useWallet()
   const [showWalletOptions, setShowWalletOptions] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
-
-  // Check if window is defined (browser) and ethereum is available
-  const isEthereumAvailable = typeof window !== "undefined" && typeof window.ethereum !== "undefined"
 
   // Set mounted state for client-side rendering
   useEffect(() => {
@@ -53,119 +45,19 @@ const WalletConnect = ({
     return () => setIsMounted(false)
   }, [])
 
-  // Detect wallet type on load
+  // Call onConnected callback when wallet is connected
   useEffect(() => {
-    if (isEthereumAvailable) {
-      if (window.ethereum.isMetaMask) {
-        setWalletType("metamask")
-      }
+    if (isConnected && onConnected) {
+      onConnected()
     }
-  }, [isEthereumAvailable])
+  }, [isConnected, onConnected])
 
-  // Check if already connected on component mount
+  // Call onDisconnected callback when wallet is disconnected
   useEffect(() => {
-    const checkConnection = async () => {
-      if (isEthereumAvailable) {
-        try {
-          const accounts = await window.ethereum.request({ method: "eth_accounts" })
-          if (accounts && accounts.length > 0) {
-            handleAccountsChanged(accounts)
-          }
-        } catch (error) {
-          console.error("Error checking connection:", error)
-        }
-      }
-    }
-
-    checkConnection()
-
-    // Set up event listeners for account changes and disconnection
-    if (isEthereumAvailable) {
-      window.ethereum.on("accountsChanged", handleAccountsChanged)
-      window.ethereum.on("disconnect", handleDisconnect)
-    }
-
-    return () => {
-      if (isEthereumAvailable) {
-        window.ethereum.removeListener("accountsChanged", handleAccountsChanged)
-        window.ethereum.removeListener("disconnect", handleDisconnect)
-      }
-    }
-  }, [isEthereumAvailable])
-
-  // Handle account changes
-  const handleAccountsChanged = (accounts: string[]) => {
-    if (accounts.length === 0) {
-      // User disconnected
-      handleDisconnect()
-    } else {
-      // User connected or switched accounts
-      const address = accounts[0]
-      setWalletAddress(address)
-      setIsConnected(true)
-
-      // Mock balance for demo purposes
-      const randomBalance = (Math.random() * 10).toFixed(4)
-      setWalletBalance(randomBalance)
-
-      // Call onConnected callback if provided
-      if (onConnected) {
-        onConnected()
-      }
-
-      toast({
-        title: "Wallet Connected",
-        description: `Connected to ${formatAddress(address)}`,
-      })
-    }
-  }
-
-  // Handle disconnection
-  const handleDisconnect = () => {
-    setIsConnected(false)
-    setWalletAddress("")
-    setWalletBalance("0.00")
-
-    // Call onDisconnected callback if provided
-    if (onDisconnected) {
+    if (!isConnected && onDisconnected) {
       onDisconnected()
     }
-  }
-
-  // Connect wallet
-  const connectWallet = async (type: WalletType = "metamask") => {
-    if (!isEthereumAvailable && type === "metamask") {
-      window.open("https://metamask.io/download/", "_blank")
-      return
-    }
-
-    setIsConnecting(true)
-    setWalletType(type)
-
-    try {
-      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" })
-      handleAccountsChanged(accounts)
-    } catch (error) {
-      console.error("Error connecting wallet:", error)
-      toast({
-        variant: "destructive",
-        title: "Connection Failed",
-        description: "Failed to connect wallet. Please try again.",
-      })
-    } finally {
-      setIsConnecting(false)
-      setShowWalletOptions(false)
-    }
-  }
-
-  // Disconnect wallet
-  const disconnectWallet = () => {
-    handleDisconnect()
-    toast({
-      title: "Wallet Disconnected",
-      description: "Your wallet has been disconnected.",
-    })
-  }
+  }, [isConnected, onDisconnected])
 
   // Format address for display
   const formatAddress = (address: string) => {
@@ -238,7 +130,10 @@ const WalletConnect = ({
           <div className="grid gap-4">
             <button
               className="flex items-center gap-4 p-4 rounded-lg border border-zinc-800 hover:bg-zinc-800/50 transition-colors"
-              onClick={() => connectWallet("metamask")}
+              onClick={() => {
+                connectWallet("metamask")
+                setShowWalletOptions(false)
+              }}
             >
               <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
                 <img src="/images/metamask-logo.png" alt="MetaMask" className="w-6 h-6" />
@@ -250,7 +145,10 @@ const WalletConnect = ({
             </button>
             <button
               className="flex items-center gap-4 p-4 rounded-lg border border-zinc-800 hover:bg-zinc-800/50 transition-colors"
-              onClick={() => connectWallet("walletconnect")}
+              onClick={() => {
+                connectWallet("walletconnect")
+                setShowWalletOptions(false)
+              }}
             >
               <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
                 <img src="/images/walletconnect-logo.png" alt="WalletConnect" className="w-6 h-6" />
@@ -329,11 +227,10 @@ const WalletConnect = ({
       <Button
         variant={variant === "default" ? "default" : "outline"}
         size={size}
-        className={`${
-          variant === "default"
-            ? "bg-gradient-to-r from-violet-600/90 to-blue-500/90 hover:from-violet-700/90 hover:to-blue-600/90"
-            : "border-violet-500/50 text-violet-500 hover:bg-violet-500/10"
-        } ${className}`}
+        className={`${variant === "default"
+          ? "bg-gradient-to-r from-violet-600/90 to-blue-500/90 hover:from-violet-700/90 hover:to-blue-600/90"
+          : "border-violet-500/50 text-violet-500 hover:bg-violet-500/10"
+          } ${className}`}
         onClick={() => setShowWalletOptions(true)}
         disabled={isConnecting}
       >
