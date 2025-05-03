@@ -1,10 +1,13 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
-import { Menu, X, Disc } from "lucide-react"
+import { Menu } from "lucide-react"
 import WalletConnect from "@/components/wallet-connect"
 
 interface MobileMenuProps {
@@ -12,9 +15,10 @@ interface MobileMenuProps {
     href: string
     label: string
   }[]
+  logo?: React.ReactNode
 }
 
-export default function MobileMenu({ links }: MobileMenuProps) {
+export default function MobileMenu({ links, logo }: MobileMenuProps) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -28,16 +32,14 @@ export default function MobileMenu({ links }: MobileMenuProps) {
       <SheetContent side="right" className="w-full sm:w-80 bg-zinc-900 border-zinc-800 p-0">
         <div className="flex flex-col h-full">
           <div className="flex items-center justify-between p-4 border-b border-zinc-800">
-            <Link href="/" className="flex items-center gap-2" onClick={() => setOpen(false)}>
-              <Disc className="h-6 w-6 text-violet-500" />
-              <span className="font-bold text-lg tracking-tight">
-                RIFF<span className="text-violet-500">block</span>
-              </span>
-            </Link>
-            <Button variant="ghost" size="icon" onClick={() => setOpen(false)}>
-              <X className="h-5 w-5" />
-              <span className="sr-only">Close</span>
-            </Button>
+            {logo || (
+              <Link href="/" className="flex items-center gap-2" onClick={() => setOpen(false)}>
+                <Image src="/riffblock-logo.png" alt="RIFFblock" width={28} height={28} />
+                <span className="font-bold text-lg tracking-tight">
+                  RIFF<span className="text-violet-500">BLOCK</span>
+                </span>
+              </Link>
+            )}
           </div>
           <nav className="flex-1 overflow-auto py-6 px-4">
             <ul className="space-y-6">

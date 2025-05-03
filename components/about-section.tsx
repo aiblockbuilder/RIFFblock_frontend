@@ -54,7 +54,7 @@ export default function AboutSection() {
 
           {/* Glowing line (animated) */}
           <motion.div
-            className="absolute top-1/2 left-0 h-0.5 bg-gradient-to-r from-violet-500 via-blue-500 to-indigo-500 transform -translate-y-1/2 z-10"
+            className="absolute top-1/2 left-0 h-0.5 bg-gradient-to-r from-violet-500 via-blue-500 to-violet-500 transform -translate-y-1/2 z-10"
             initial={{ width: "0%" }}
             animate={{ width: "100%" }}
             transition={{ duration: 1.5, ease: "easeInOut" }}
