@@ -32,7 +32,7 @@ export default function FloatingShapes({ density = 1, speed = 1, opacity = 0.5 }
     window.addEventListener("resize", setCanvasDimensions)
 
     // Create shapes
-    const shapes = []
+    const shapes: { x: number; y: number; size: number; speedX: number; speedY: number; rotation: number; rotationSpeed: number; type: number; hue: number; opacity: number }[] = []
     const shapeCount = Math.floor(15 * density)
 
     // Shape types: 0 = circle, 1 = square, 2 = triangle
