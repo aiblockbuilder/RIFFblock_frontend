@@ -11,7 +11,7 @@ import StudioHero from "@/components/studio-hero"
 
 export default function RIFFblockLanding() {
   const navLinks = [
-    { href: "#about", label: "About" },
+    { href: "/about", label: "About" },
     { href: "/profile", label: "Profile" },
     { href: "/market", label: "Market" },
     { href: "/upload", label: "Upload" },
