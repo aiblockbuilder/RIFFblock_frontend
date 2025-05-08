@@ -34,7 +34,7 @@ export default function RIFFblockLanding() {
               <Image src="/riffblock-logo.png" alt="RIFFblock" width={60} height={60} className="relative z-10" />
             </div>
             <span className="font-bold text-xl tracking-tight">
-              RIFF<span className="text-violet-500">block</span>
+              RIFF<span className="text-violet-500">BLOCK</span>
             </span>
           </Link>
           <nav className="hidden md:flex items-center gap-6">
@@ -42,7 +42,7 @@ export default function RIFFblockLanding() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-sm font-medium text-zinc-400 hover:text-violet-400 transition-colors"
+                className="text-lg font-medium text-zinc-400 hover:text-violet-400 transition-colors"
               >
                 {link.label}
               </Link>
@@ -82,10 +82,10 @@ export default function RIFFblockLanding() {
             <div className="flex items-center gap-2 mb-4 md:mb-0">
               <Image src="/riffblock-logo.png" alt="RIFFblock" width={48} height={48} />
               <span className="font-bold text-lg tracking-tight">
-                RIFF<span className="text-violet-500">block</span>
+                RIFF<span className="text-violet-500">BLOCK</span>
               </span>
             </div>
-            <p className="text-zinc-500 text-sm">© {new Date().getFullYear()} RIFFblock. All rights reserved.</p>
+            <p className="text-zinc-500 text-sm">© {new Date().getFullYear()} RIFFBLOCK. All rights reserved.</p>
             <div className="flex items-center gap-2 mt-4 md:mt-0">
               <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm px-3 py-1 rounded-full">
                 <Image src="/polygon-logo.png" alt="Polygon" width={16} height={16} />
