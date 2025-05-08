@@ -25,6 +25,8 @@ interface RiffNFT {
 export default function StudioHero() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
+  // Add a new state to track the selected playback mode
+  const [playbackMode, setPlaybackMode] = useState<"newest" | "random">("newest")
 
   // Featured artist data (would come from API in real implementation)
   const featuredArtist: Artist = {
@@ -149,6 +151,22 @@ export default function StudioHero() {
                   <span className="text-xs text-zinc-400">RIFFLORDS • MOST RIFF STAKED</span>
                 </div>
                 <div className="flex items-center gap-2">
+                  <div className="flex items-center bg-zinc-800/80 rounded-full p-0.5">
+                    <button
+                      onClick={() => setPlaybackMode("newest")}
+                      className={`px-2 py-0.5 text-xs rounded-full transition-all ${playbackMode === "newest" ? "bg-blue-500/30 text-blue-300" : "text-zinc-400 hover:text-zinc-300"
+                        }`}
+                    >
+                      Newest
+                    </button>
+                    <button
+                      onClick={() => setPlaybackMode("random")}
+                      className={`px-2 py-0.5 text-xs rounded-full transition-all ${playbackMode === "random" ? "bg-indigo-500/30 text-red-300" : "text-zinc-400 hover:text-zinc-300"
+                        }`}
+                    >
+                      Random
+                    </button>
+                  </div>
                   <div className="px-2 py-0.5 bg-blue-500/20 rounded text-xs text-blue-300">NFT</div>
                 </div>
               </div>
@@ -202,7 +220,12 @@ export default function StudioHero() {
                     <div className="flex justify-between items-end">
                       <div>
                         <h3 className="text-2xl font-bold">{topRiffNFT.name}</h3>
-                        <p className="text-blue-300">by {topRiffNFT.artist}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-blue-300">by {topRiffNFT.artist}</p>
+                          <span className="text-xs text-zinc-500">
+                            {playbackMode === "newest" ? "• Latest Upload" : "• Random Selection"}
+                          </span>
+                        </div>
                       </div>
                       <div className="bg-blue-500/20 backdrop-blur-sm px-3 py-1 rounded-full">
                         <span className="text-blue-300 font-medium">
