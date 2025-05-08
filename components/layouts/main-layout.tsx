@@ -30,7 +30,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
     const navLinks = [
         { href: "/", label: "Home" },
-        { href: "#about", label: "About" },
+        { href: "/about", label: "About" },
         { href: "/profile", label: "Profile" },
         { href: "/market", label: "Market" },
         { href: "/upload", label: "Upload" },
@@ -47,8 +47,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
             {/* Header */}
             <header
-                className={`backdrop-blur-md fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? "bg-black/50 shadow-lg shadow-black/20" : "bg-black/10"
-                    }`}
+                className={`backdrop-blur-md fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? "bg-black/50 shadow-lg shadow-black/20" : "bg-black/10"}`}
             >
                 <div className="container flex items-center justify-between h-16 px-4 md:px-6">
                     <Link href="/" className="flex items-center gap-3">
@@ -65,8 +64,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
                             <Link
                                 key={link.href}
                                 href={link.href}
-                                className={`text-sm font-medium text-zinc-400 hover:text-violet-400 transition-colors ${link.href === "/profile" ? "text-violet-400" : ""
-                                    }`}
+                                className={`text-md font-medium text-zinc-400 hover:text-violet-400 transition-colors ${link.href === "/profile" ? "text-violet-400" : ""}`}
                             >
                                 {link.label}
                             </Link>
