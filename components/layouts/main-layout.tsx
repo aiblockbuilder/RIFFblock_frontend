@@ -40,16 +40,16 @@ export default function MainLayout({ children }: MainLayoutProps) {
     ]
 
     return (
-        <div className="min-h-screen bg-[#0d0d0d] text-white overflow-hidden">
+        <div className="relative">
             {/* Background effects */}
-            <div className="fixed inset-0 z-0">
+            <div className="fixed inset-0 z-0 pointer-events-none">
                 <FlowingBackground speed={0.5} intensity={1} />
                 <FloatingShapes density={0.7} speed={0.5} opacity={0.3} />
             </div>
 
             {/* Header */}
             <header
-                className={`backdrop-blur-md fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? "bg-black/50 shadow-lg shadow-black/20" : "bg-black/10"
+                className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? "bg-black/50 shadow-lg shadow-black/20" : "bg-black/10"
                     }`}
             >
                 <div className="container flex items-center justify-between h-16 px-4 md:px-6">
@@ -67,7 +67,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
                             <Link
                                 key={link.href}
                                 href={link.href}
-                                className={`text-sm font-medium text-zinc-400 hover:text-violet-400 transition-colors ${pathname === link.href ? "text-violet-400" : ""
+                                className={`text-md font-medium text-zinc-400 hover:text-violet-400 transition-colors ${pathname === link.href ? "text-violet-400" : ""
                                     }`}
                             >
                                 {link.label}

@@ -99,7 +99,7 @@ export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditin
 
                                     <div className="flex items-center gap-1 bg-zinc-900/80 px-2 py-1 rounded-full text-xs">
                                         <span>{profile.ensName || "0x1234...5678"}</span>
-                                        <button onClick={copyWalletAddress} className="text-zinc-500 hover:text-zinc-300">
+                                        <button onClick={() => copyWalletAddress()} className="text-zinc-500 hover:text-zinc-300">
                                             <Copy className="h-3 w-3" />
                                         </button>
                                     </div>
@@ -107,7 +107,7 @@ export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditin
                             </div>
 
                             {/* Stats */}
-                            <div className="flex gap-4 md:gap-6">
+                            <div className="flex mt-4 gap-4 md:gap-6">
                                 <div className="text-center">
                                     <div className="text-2xl font-bold text-violet-400">{profile.stats.totalRiffs}</div>
                                     <div className="text-xs text-zinc-500">Riffs</div>

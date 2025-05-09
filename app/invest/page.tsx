@@ -46,6 +46,7 @@ import {
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import CreativeGradientBackground from "@/components/creative-gradient-background"
 
 export default function InvestPage() {
     const { isConnected, walletAddress } = useWallet()
@@ -546,7 +547,7 @@ export default function InvestPage() {
                                                 variant="outline"
                                                 className="border-zinc-800 bg-zinc-900 hover:bg-zinc-800 hover:text-white flex flex-col items-center p-3 h-auto"
                                             >
-                                                <Image src="/eth-logo.svg" alt="ETH" width={24} height={24} className="mb-1" />
+                                                <Image src="/eth-logo.png" alt="ETH" width={24} height={24} className="mb-1" />
                                                 <span className="text-xs">ETH</span>
                                             </Button>
                                             <Button
@@ -560,8 +561,8 @@ export default function InvestPage() {
                                                 variant="outline"
                                                 className="border-zinc-800 bg-zinc-900 hover:bg-zinc-800 hover:text-white flex flex-col items-center p-3 h-auto"
                                             >
-                                                <Image src="/POL-logo.png" alt="POL" width={24} height={24} className="mb-1" />
-                                                <span className="text-xs">POL</span>
+                                                <Image src="/matic-logo.png" alt="POL" width={24} height={24} className="mb-1" />
+                                                <span className="text-xs">MATIC</span>
                                             </Button>
                                             <Button
                                                 variant="outline"
@@ -1545,15 +1546,17 @@ export default function InvestPage() {
 
     return (
         <MainLayout>
-            <div className="min-h-screen bg-[#0d0d0d] text-white">
-                {renderHeroSection()}
-                {renderBuyRIFFSection()}
-                {renderFeaturedRiffsSection()}
-                {renderHowItWorksSection()}
-                {renderBackstageAccessSection()}
-                {renderSupportDashboardSection()}
-                {renderRoyaltyMechanicsSection()}
-            </div>
+            <CreativeGradientBackground variant="invest">
+            <div className="min-h-screen pb-16">
+                    {renderHeroSection()}
+                    {renderBuyRIFFSection()}
+                    {renderFeaturedRiffsSection()}
+                    {renderHowItWorksSection()}
+                    {renderBackstageAccessSection()}
+                    {renderSupportDashboardSection()}
+                    {renderRoyaltyMechanicsSection()}
+                </div>
+            </CreativeGradientBackground>
         </MainLayout>
     )
 }
