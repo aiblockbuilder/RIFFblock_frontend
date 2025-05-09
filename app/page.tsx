@@ -42,7 +42,7 @@ export default function RIFFblockLanding() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-lg font-medium text-zinc-400 hover:text-violet-400 transition-colors"
+                className="text-md font-medium text-zinc-400 hover:text-violet-400 transition-colors"
               >
                 {link.label}
               </Link>

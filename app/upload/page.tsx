@@ -35,6 +35,7 @@ import {
 import MainLayout from "@/components/layouts/main-layout"
 import WaveformVisualizer from "@/components/upload/waveform-visualizer"
 import WalletConnect from "@/components/wallet-connect"
+import CreativeGradientBackground from "@/components/creative-gradient-background"
 
 // Define the steps in the upload process
 const STEPS = {
@@ -146,11 +147,13 @@ export default function UploadPage() {
 
         // Create audio element to check duration
         const audio = new Audio()
-        audio.src = URL.createObjectURL(selectedFile)
+        const objectUrl = URL.createObjectURL(selectedFile)
+        audio.src = objectUrl
 
         audio.onloadedmetadata = () => {
             // Check duration (1 minute max)
             if (audio.duration > 60) {
+                URL.revokeObjectURL(objectUrl)
                 toast({
                     title: "File Too Long",
                     description: "Maximum riff length is 1 minute.",
@@ -161,11 +164,13 @@ export default function UploadPage() {
 
             setFile(selectedFile)
             setFilePreview(URL.createObjectURL(selectedFile))
+            setFilePreview(objectUrl)
             setFileDuration(audio.duration)
             audioRef.current = audio
         }
 
         audio.onerror = () => {
+            URL.revokeObjectURL(objectUrl)
             toast({
                 title: "Error Loading Audio",
                 description: "There was a problem processing your audio file.",
@@ -230,7 +235,20 @@ export default function UploadPage() {
         if (isPlaying) {
             audioRef.current.pause()
         } else {
-            audioRef.current.play()
+            // Resume AudioContext if it was suspended
+            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+            if (audioContext.state === "suspended") {
+                audioContext.resume()
+            }
+
+            audioRef.current.play().catch((error) => {
+                console.error("Error playing audio:", error)
+                toast({
+                    title: "Playback Error",
+                    description: "There was a problem playing this audio file.",
+                    variant: "destructive",
+                })
+            })
         }
 
         setIsPlaying(!isPlaying)
@@ -395,10 +413,10 @@ export default function UploadPage() {
                                 <div key={step} className="flex items-center">
                                     <div
                                         className={`w-8 h-8 rounded-full flex items-center justify-center ${isActive
-                                                ? "bg-violet-500 text-white"
-                                                : isCompleted
-                                                    ? "bg-green-500 text-white"
-                                                    : "bg-zinc-800 text-zinc-400"
+                                            ? "bg-violet-500 text-white"
+                                            : isCompleted
+                                                ? "bg-green-500 text-white"
+                                                : "bg-zinc-800 text-zinc-400"
                                             }`}
                                     >
                                         {isCompleted ? <Check className="h-4 w-4" /> : <span>{step + 1}</span>}
@@ -424,10 +442,10 @@ export default function UploadPage() {
 
                 <div
                     className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${dragActive
-                            ? "border-violet-500 bg-violet-500/10"
-                            : file
-                                ? "border-green-500 bg-green-500/10"
-                                : "border-zinc-700 hover:border-zinc-500"
+                        ? "border-violet-500 bg-violet-500/10"
+                        : file
+                            ? "border-green-500 bg-green-500/10"
+                            : "border-zinc-700 hover:border-zinc-500"
                         }`}
                     onDragEnter={handleDrag}
                     onDragOver={handleDrag}
@@ -706,8 +724,8 @@ export default function UploadPage() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div
                                     className={`p-4 rounded-lg border cursor-pointer transition-all ${collection === "new"
-                                            ? "border-violet-500 bg-violet-500/10"
-                                            : "border-zinc-800 bg-zinc-900/50 hover:border-zinc-700"
+                                        ? "border-violet-500 bg-violet-500/10"
+                                        : "border-zinc-800 bg-zinc-900/50 hover:border-zinc-700"
                                         }`}
                                     onClick={() => setCollection("new")}
                                 >
@@ -732,8 +750,8 @@ export default function UploadPage() {
 
                                 <div
                                     className={`p-4 rounded-lg border cursor-pointer transition-all ${collection === "existing"
-                                            ? "border-violet-500 bg-violet-500/10"
-                                            : "border-zinc-800 bg-zinc-900/50 hover:border-zinc-700"
+                                        ? "border-violet-500 bg-violet-500/10"
+                                        : "border-zinc-800 bg-zinc-900/50 hover:border-zinc-700"
                                         }`}
                                     onClick={() => setCollection("existing")}
                                 >
@@ -923,8 +941,8 @@ export default function UploadPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div
                         className={`p-6 rounded-xl border cursor-pointer transition-all ${uploadType === "just-upload"
-                                ? "border-violet-500 bg-violet-500/10"
-                                : "border-zinc-800 bg-zinc-900/50 hover:border-zinc-700"
+                            ? "border-violet-500 bg-violet-500/10"
+                            : "border-zinc-800 bg-zinc-900/50 hover:border-zinc-700"
                             }`}
                         onClick={() => setUploadType("just-upload")}
                     >
@@ -960,8 +978,8 @@ export default function UploadPage() {
 
                     <div
                         className={`p-6 rounded-xl border cursor-pointer transition-all ${uploadType === "mint-nft"
-                                ? "border-violet-500 bg-violet-500/10"
-                                : "border-zinc-800 bg-zinc-900/50 hover:border-zinc-700"
+                            ? "border-violet-500 bg-violet-500/10"
+                            : "border-zinc-800 bg-zinc-900/50 hover:border-zinc-700"
                             }`}
                         onClick={() => setUploadType("mint-nft")}
                     >
@@ -1530,23 +1548,25 @@ export default function UploadPage() {
 
     return (
         <MainLayout>
-            <div className="min-h-screen bg-[#0d0d0d] text-white py-12">
-                <div className="container px-4 md:px-6 max-w-6xl mx-auto">
-                    {renderStepIndicator()}
+            <CreativeGradientBackground variant="upload">
+                <div className="min-h-screen pb-16 mt-16">
+                    <div className="container px-4 md:px-6 max-w-6xl mx-auto">
+                        {renderStepIndicator()}
 
-                    <AnimatePresence mode="wait">
-                        <motion.div
-                            key={currentStep}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            transition={{ duration: 0.3 }}
-                        >
-                            {renderStep()}
-                        </motion.div>
-                    </AnimatePresence>
+                        <AnimatePresence mode="wait">
+                            <motion.div
+                                key={currentStep}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                transition={{ duration: 0.3 }}
+                            >
+                                {renderStep()}
+                            </motion.div>
+                        </AnimatePresence>
+                    </div>
                 </div>
-            </div>
+            </CreativeGradientBackground>
         </MainLayout>
     )
 }
