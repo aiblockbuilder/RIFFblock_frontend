@@ -49,10 +49,12 @@ body {
 }
 
 @keyframes pulse {
+
   0%,
   100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.5;
   }
@@ -60,4 +62,178 @@ body {
 
 .animate-pulse {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 262.1 83.3% 57.8%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 262.1 83.3% 57.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .animate-spin-slow {
+    animation: spin 8s linear infinite;
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* Add the wood grain pattern class using the uploaded image */
+  .wood-grain-pattern {
+    background-image: url("/images/wood-grain-texture.jpeg");
+    background-repeat: repeat;
+    background-size: cover;
+    filter: brightness(0.7) contrast(1.2)
+  }
+
+  .brick-pattern {
+    background-color: #7c2d12;
+    background-image: linear-gradient(335deg, #b45309 23px, transparent 23px),
+      linear-gradient(155deg, #b45309 23px, transparent 23px), linear-gradient(335deg, #b45309 23px, transparent 23px),
+      linear-gradient(155deg, #b45309 23px, transparent 23px);
+    background-size: 58px 58px;
+    background-position: 0px 2px, 4px 35px, 29px 31px, 34px 6px;
+  }
+
+  .vinyl-texture {
+    background-color: #251f1b;
+    background-image: radial-gradient(circle at center, transparent 20%, #0c0a09 70%),
+      repeating-radial-gradient(circle at center, #1c1917 0, #1c1917 1px, transparent 1px, transparent 2px);
+    background-size: 100% 100%, 20px 20px;
+    background-position: center;
+  }
+
+  .wooden-floor-pattern {
+    background-image: url("/images/wood-background-texture.png");
+    background-repeat: repeat;
+    background-size: 200px;
+    transform: rotate(0deg);
+  }
+
+  .wooden-floor-pattern-light {
+    background-image: url("/images/wood-background-texture.png");
+    background-repeat: repeat;
+    background-size: 200px;
+    filter: brightness(1.1);
+    transform: rotate(0deg);
+  }
+
+  /* String lights animation */
+  @keyframes lightFlicker {
+
+    0%,
+    100% {
+      opacity: 1;
+      filter: drop-shadow(0 0 5px rgba(255, 200, 120, 0.8));
+    }
+
+    3% {
+      opacity: 0.8;
+      filter: drop-shadow(0 0 3px rgba(255, 200, 120, 0.5));
+    }
+
+    6% {
+      opacity: 1;
+      filter: drop-shadow(0 0 5px rgba(255, 200, 120, 0.8));
+    }
+
+    10% {
+      opacity: 0.9;
+      filter: drop-shadow(0 0 4px rgba(255, 200, 120, 0.6));
+    }
+
+    20% {
+      opacity: 1;
+      filter: drop-shadow(0 0 5px rgba(255, 200, 120, 0.8));
+    }
+
+    50% {
+      opacity: 0.97;
+      filter: drop-shadow(0 0 4.5px rgba(255, 200, 120, 0.75));
+    }
+  }
+
+  .light-bulb {
+    width: 10px;
+    height: 10px;
+    background-color: #ffb74d;
+    border-radius: 50%;
+    position: relative;
+    box-shadow: 0 0 10px 2px rgba(255, 183, 77, 0.6);
+    animation: lightFlicker 5s infinite;
+    animation-delay: var(--delay, 0s);
+  }
+
+  .light-bulb::after {
+    content: "";
+    position: absolute;
+    top: -2px;
+    left: 4px;
+    width: 2px;
+    height: 2px;
+    background-color: white;
+    border-radius: 50%;
+    opacity: 0.8;
+  }
+
+  .string-wire {
+    height: 2px;
+    background-color: #444;
+    position: relative;
+    transform: translateY(-5px);
+  }
+
+  .string-wire::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  }
 }
