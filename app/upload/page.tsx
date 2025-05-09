@@ -1456,7 +1456,7 @@ export default function UploadPage() {
                                     <>
                                         <div className="flex justify-between">
                                             <span className="text-zinc-400">Minting Fee (est.)</span>
-                                            <span>~0.001 MATIC</span>
+                                            <span>~0.001 POL</span>
                                         </div>
 
                                         <div className="flex justify-between">

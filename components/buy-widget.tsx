@@ -70,8 +70,8 @@ export default function BuyWidget() {
               variant="outline"
               className="border-zinc-800 bg-zinc-900 hover:bg-zinc-800 hover:text-white flex flex-col items-center p-3 h-auto"
             >
-              <Image src="/matic-logo.png" alt="MATIC" width={24} height={24} className="mb-1" />
-              <span className="text-xs">MATIC</span>
+              <Image src="/POL-logo.png" alt="POL" width={24} height={24} className="mb-1" />
+              <span className="text-xs">POL</span>
             </Button>
             <Button
               variant="outline"
