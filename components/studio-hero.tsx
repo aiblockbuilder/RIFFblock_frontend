@@ -81,7 +81,7 @@ export default function StudioHero() {
       {/* Studio background image */}
       <div className="absolute inset-0">
         <Image
-          src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/a-professional-music-production-studio-setup--view.jpg-uxH06J2CSRw9iMBz5UhqfE6wZhkP0y.jpeg"
+          src="/images/hero.jpeg"
           alt="Professional music studio"
           fill
           priority
@@ -100,7 +100,7 @@ export default function StudioHero() {
           </div> */}
 
           {/* Monitors overlay - positioned to align with the actual monitors in the image */}
-          <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-2">
+          <div className="w-full max-w-6xl grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-2">
             {/* Left monitor - Featured Artist */}
             <div className="relative bg-black/70 backdrop-blur-md rounded-lg border border-zinc-800/50 overflow-hidden shadow-2xl shadow-violet-900/20">
               <div className="absolute top-0 left-0 right-0 bg-zinc-900/80 px-4 py-2 flex items-center justify-between border-b border-zinc-800">
