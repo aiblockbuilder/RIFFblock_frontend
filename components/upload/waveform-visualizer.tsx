@@ -16,49 +16,123 @@ export default function WaveformVisualizer({
     backgroundColor = "#27272a",
 }: WaveformVisualizerProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null)
+    const audioRef = useRef<HTMLAudioElement | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [audioContext, setAudioContext] = useState<AudioContext | null>(null)
+    const [analyser, setAnalyser] = useState<AnalyserNode | null>(null)
+    const animationRef = useRef<number | null>(null)
 
+    // Initialize audio context
     useEffect(() => {
-        if (!audioUrl) return
+        // Create audio context only on user interaction to comply with browser policies
+        const handleUserInteraction = () => {
+            if (!audioContext) {
+                try {
+                    const newAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+                    const newAnalyser = newAudioContext.createAnalyser()
+                    newAnalyser.fftSize = 256
 
-        const canvas = canvasRef.current
-        if (!canvas) return
+                    setAudioContext(newAudioContext)
+                    setAnalyser(newAnalyser)
+                } catch (err) {
+                    console.error("Failed to create audio context:", err)
+                    setError("Your browser doesn't support audio visualization")
+                }
+            }
+        }
 
-        const ctx = canvas.getContext("2d")
-        if (!ctx) return
+        // Add event listeners for user interaction
+        window.addEventListener("click", handleUserInteraction)
+        window.addEventListener("touchstart", handleUserInteraction)
 
-        // Set canvas dimensions
-        canvas.width = canvas.clientWidth * window.devicePixelRatio
-        canvas.height = height * window.devicePixelRatio
-        ctx.scale(window.devicePixelRatio, window.devicePixelRatio)
+        return () => {
+            window.removeEventListener("click", handleUserInteraction)
+            window.removeEventListener("touchstart", handleUserInteraction)
 
-        // Create audio context
-        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
-        const analyser = audioContext.createAnalyser()
-        analyser.fftSize = 256
-        const bufferLength = analyser.frequencyBinCount
-        const dataArray = new Uint8Array(bufferLength)
+            // Clean up animation and audio context
+            if (animationRef.current) {
+                cancelAnimationFrame(animationRef.current)
+            }
 
-        // Load audio
+            if (audioContext) {
+                audioContext.close()
+            }
+        }
+    }, [audioContext])
+
+    // Set up audio and visualization when URL changes
+    useEffect(() => {
+        if (!audioUrl || !audioContext || !analyser) return
+
+        setIsLoading(true)
+        setError(null)
+
+        // Clean up previous animation
+        if (animationRef.current) {
+            cancelAnimationFrame(animationRef.current)
+            animationRef.current = null
+        }
+
+        // Create new audio element
         const audio = new Audio()
         audio.crossOrigin = "anonymous"
+        audioRef.current = audio
+
+        // Set up audio source and connect to analyser
+        const setupAudio = () => {
+            try {
+                if (!audioContext || !analyser) return
+
+                const source = audioContext.createMediaElementSource(audio)
+                source.connect(analyser)
+                analyser.connect(audioContext.destination)
+
+                setIsLoading(false)
+                drawWaveform()
+            } catch (err) {
+                console.error("Error setting up audio:", err)
+                setError("Failed to process audio")
+                setIsLoading(false)
+            }
+        }
+
+        // Handle audio load events
+        audio.onloadeddata = setupAudio
+
+        audio.onerror = () => {
+            console.error("Error loading audio:", audio.error)
+            setError("Failed to load audio")
+            setIsLoading(false)
+        }
+
+        // Load the audio file
         audio.src = audioUrl
 
-        const source = audioContext.createMediaElementSource(audio)
-        source.connect(analyser)
-        analyser.connect(audioContext.destination)
-
-        // Draw waveform
+        // Draw waveform function
         const drawWaveform = () => {
-            if (!canvas || !ctx) return
+            if (!canvasRef.current || !analyser) return
+
+            const canvas = canvasRef.current
+            const ctx = canvas.getContext("2d")
+            if (!ctx) return
+
+            // Set canvas dimensions with device pixel ratio for sharp rendering
+            const dpr = window.devicePixelRatio || 1
+            canvas.width = canvas.clientWidth * dpr
+            canvas.height = height * dpr
+
+            // Scale context according to device pixel ratio
+            ctx.scale(dpr, dpr)
+
+            // Get frequency data
+            const bufferLength = analyser.frequencyBinCount
+            const dataArray = new Uint8Array(bufferLength)
+            analyser.getByteFrequencyData(dataArray)
 
             // Clear canvas
             ctx.fillStyle = backgroundColor
             ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight)
-
-            // Get frequency data
-            analyser.getByteFrequencyData(dataArray)
 
             // Calculate bar width and spacing
             const barCount = bufferLength / 2
@@ -81,26 +155,58 @@ export default function WaveformVisualizer({
             }
 
             // Continue animation
-            requestAnimationFrame(drawWaveform)
+            animationRef.current = requestAnimationFrame(drawWaveform)
         }
 
-        // Handle audio load
-        audio.onloadeddata = () => {
-            setIsLoading(false)
-            drawWaveform()
-        }
-
-        // Handle errors
-        audio.onerror = () => {
-            setIsLoading(false)
-            setError("Failed to load audio")
-        }
-
-        // Clean up
+        // Clean up function
         return () => {
-            audioContext.close()
+            if (animationRef.current) {
+                cancelAnimationFrame(animationRef.current)
+            }
+
+            audio.pause()
+            audio.src = ""
         }
-    }, [audioUrl, height, color, backgroundColor])
+    }, [audioUrl, audioContext, analyser, height, color, backgroundColor])
+
+    // Draw static visualization when no audio is playing
+    useEffect(() => {
+        if (!canvasRef.current || isLoading || error) return
+
+        // If we don't have audio playing, draw a static visualization
+        if (!audioUrl || !audioContext || !analyser) {
+            const canvas = canvasRef.current
+            const ctx = canvas.getContext("2d")
+            if (!ctx) return
+
+            // Set canvas dimensions
+            const dpr = window.devicePixelRatio || 1
+            canvas.width = canvas.clientWidth * dpr
+            canvas.height = height * dpr
+            ctx.scale(dpr, dpr)
+
+            // Clear canvas
+            ctx.fillStyle = backgroundColor
+            ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight)
+
+            // Draw static bars
+            ctx.fillStyle = color
+            const barCount = 32
+            const barWidth = canvas.clientWidth / barCount
+            const barSpacing = 1
+
+            for (let i = 0; i < barCount; i++) {
+                // Generate random heights for static visualization
+                const barHeight = Math.random() * (canvas.clientHeight * 0.6) + canvas.clientHeight * 0.1
+                const x = i * (barWidth + barSpacing)
+                const y = (canvas.clientHeight - barHeight) / 2
+
+                ctx.beginPath()
+                ctx.roundRect(x, y, barWidth, barHeight, [2])
+                ctx.fill()
+            }
+        }
+    }, [audioUrl, audioContext, analyser, isLoading, error, height, color, backgroundColor])
 
     return (
         <div className="w-full relative">

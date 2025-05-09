@@ -340,7 +340,7 @@ export default function MarketPage() {
                 <div className="fixed inset-0 bg-black/60 z-0"></div>
 
                 {/* String lights at the ceiling */}
-                <StringLights />
+                {/* <StringLights /> */}
 
                 {/* Audio elements */}
                 <audio
@@ -352,7 +352,7 @@ export default function MarketPage() {
                 <audio ref={vinylFlipRef} src="/vinyl-flip.mp3" />
 
                 {/* Page header with sound toggle */}
-                <div className="container px-4 md:px-6 mb-8 pt-4 relative z-10">
+                <div className="container px-4 md:px-6 mb-8 pt-4 mt-6 relative z-10">
                     <div className="flex items-center justify-between">
                         <div>
                             <h1 className="text-3xl md:text-4xl font-bold text-orange-100 mb-2 font-serif">The RIFF Store</h1>
