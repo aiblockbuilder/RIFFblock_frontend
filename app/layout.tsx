@@ -11,7 +11,6 @@ export const metadata: Metadata = {
   title: "RIFFblock - Own the Future of Music",
   description:
     "RIFFblock is revolutionizing how artists create, distribute, and monetize music through blockchain technology.",
-  generator: 'v0.dev'
 }
 
 export default function RootLayout({
