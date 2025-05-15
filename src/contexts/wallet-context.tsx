@@ -3,6 +3,7 @@
 import type React from "react"
 import { createContext, useState, useContext, useEffect } from "react"
 import { toast } from "@/components/ui/use-toast"
+import { useApi } from "@/contexts/api-context"
 
 // Supported wallet types
 export type WalletType = "metamask" | "walletconnect" | null
@@ -26,6 +27,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [walletType, setWalletType] = useState<WalletType>(null)
     const [walletBalance, setWalletBalance] = useState("0.00")
     const [isMounted, setIsMounted] = useState(false)
+    const { user } = useApi()
 
     // Check if window is defined (browser) and ethereum is available
     // @ts-expect-error: expect error
@@ -86,7 +88,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }, [isEthereumAvailable, isMounted])
 
     // Handle account changes
-    const handleAccountsChanged = (accounts: string[]) => {
+    const handleAccountsChanged = async (accounts: string[]) => {
         if (accounts.length === 0) {
             // User disconnected
             handleDisconnect()
@@ -96,14 +98,32 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             setWalletAddress(address)
             setIsConnected(true)
 
-            // Mock balance for demo purposes
-            const randomBalance = (Math.random() * 10).toFixed(4)
-            setWalletBalance(randomBalance)
+            try {
+                // Connect wallet on backend
+                await user.connectWallet(address)
 
-            toast({
-                title: "Wallet Connected",
-                description: `Connected to ${formatAddress(address)}`,
-            })
+                // Get user profile including balance
+                const { data } = await user.getProfile()
+                if (data && data.balance) {
+                    setWalletBalance(data.balance.toString())
+                } else {
+                    // Fallback to mock balance if not available
+                    const randomBalance = (Math.random() * 10).toFixed(4)
+                    setWalletBalance(randomBalance)
+                }
+
+                toast({
+                    title: "Wallet Connected",
+                    description: `Connected to ${formatAddress(address)}`,
+                })
+            } catch (error) {
+                console.error("Error connecting wallet to backend:", error)
+                toast({
+                    variant: "destructive",
+                    title: "Connection Error",
+                    description: "Failed to connect wallet to backend. Please try again.",
+                })
+            }
         }
     }
 
