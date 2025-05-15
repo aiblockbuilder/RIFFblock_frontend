@@ -27,40 +27,40 @@ The RIFFblock frontend is built with Next.js 14 using the App Router, React, Typ
 
 1. Clone the repository
 2. Navigate to the frontend directory:
-   \`\`\`bash
+   ```bash
    cd frontend
-   \`\`\`
+   ```
 3. Install dependencies:
-   \`\`\`bash
+   ```bash
    npm install
    # or
    yarn
-   \`\`\`
+   ```
 4. Copy the example environment file:
-   \`\`\`bash
+   ```bash
    cp .env.example .env
-   \`\`\`
+   ```
 5. Update the environment variables in `.env`
 
 ### Development
 
 Start the development server:
 
-\`\`\`bash
+```bash
 npm run dev
-### or
+# or
 yarn dev
-\`\`\`
+```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ### Building for Production
 
-\`\`\`bash
+```bash
 npm run build
 # or
 yarn build
-\`\`\`
+```
 
 ### Environment Variables
 

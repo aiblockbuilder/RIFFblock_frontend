@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { motion, AnimatePresence } from "framer-motion"
 import { useWallet } from "@/contexts/wallet-context"
+import { useApi } from "@/contexts/api-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -49,11 +50,14 @@ const STEPS = {
 export default function UploadPage() {
     const router = useRouter()
     const { isConnected } = useWallet()
+    const { riff: riffApi, nft: nftApi } = useApi()
     const [currentStep, setCurrentStep] = useState(STEPS.FILE_UPLOAD)
     const [isUploading, setIsUploading] = useState(false)
     const [isMinting, setIsMinting] = useState(false)
     const [isPlaying, setIsPlaying] = useState(false)
     const [uploadType, setUploadType] = useState<"just-upload" | "mint-nft">("just-upload")
+    const [collections, setCollections] = useState<any[]>([])
+    const [isLoadingCollections, setIsLoadingCollections] = useState(false)
 
     // File upload state
     const [file, setFile] = useState<File | null>(null)
@@ -95,6 +99,33 @@ export default function UploadPage() {
     const audioRef = useRef<HTMLAudioElement | null>(null)
     const fileInputRef = useRef<HTMLInputElement | null>(null)
     const imageInputRef = useRef<HTMLInputElement | null>(null)
+
+    // Fetch user collections
+    useEffect(() => {
+        const fetchCollections = async () => {
+            if (!isConnected) return
+
+            try {
+                setIsLoadingCollections(true)
+                // In a real implementation, we would fetch collections from the API
+                // const response = await userApi.getUserCollections()
+                // setCollections(response.data)
+
+                // Mock collections for now
+                setCollections([
+                    { id: "collection-1", name: "Synthwave Sessions" },
+                    { id: "collection-2", name: "Guitar Experiments" },
+                    { id: "collection-3", name: "Ambient Textures" },
+                ])
+            } catch (error) {
+                console.error("Error fetching collections:", error)
+            } finally {
+                setIsLoadingCollections(false)
+            }
+        }
+
+        fetchCollections()
+    }, [isConnected])
 
     // Check if user is connected to wallet
     useEffect(() => {
@@ -357,12 +388,42 @@ export default function UploadPage() {
             return
         }
 
-        if (uploadType === "just-upload") {
-            setIsUploading(true)
+        if (!file) {
+            toast({
+                title: "File Required",
+                description: "Please upload an audio file.",
+                variant: "destructive",
+            })
+            return
+        }
 
-            // Simulate upload process
-            setTimeout(() => {
-                setIsUploading(false)
+        try {
+            if (uploadType === "just-upload") {
+                setIsUploading(true)
+
+                // Create form data
+                const formData = new FormData()
+                formData.append("audioFile", file)
+                if (coverImage) {
+                    formData.append("coverImage", coverImage)
+                }
+                formData.append("title", title)
+                formData.append("description", description)
+                formData.append("genre", genre)
+                formData.append("mood", mood)
+                formData.append("instrument", instrument)
+                formData.append("keySignature", keySignature)
+                formData.append("timeSignature", timeSignature)
+                formData.append("isBargainBin", isBargainBin.toString())
+
+                if (collection === "new") {
+                    formData.append("collectionName", newCollectionName)
+                } else {
+                    formData.append("collectionId", collection)
+                }
+
+                // Upload riff
+                await riffApi.uploadRiff(formData)
                 toast({
                     title: "Upload Successful",
                     description: "Your riff has been uploaded successfully!",
@@ -370,13 +431,50 @@ export default function UploadPage() {
 
                 // Redirect to profile page
                 router.push("/profile")
-            }, 2000)
-        } else {
-            setIsMinting(true)
+            } else {
+                setIsMinting(true)
 
-            // Simulate minting process
-            setTimeout(() => {
-                setIsMinting(false)
+                // Create form data for riff upload first
+                const formData = new FormData()
+                formData.append("audioFile", file)
+                if (coverImage) {
+                    formData.append("coverImage", coverImage)
+                }
+                formData.append("title", title)
+                formData.append("description", description)
+                formData.append("genre", genre)
+                formData.append("mood", mood)
+                formData.append("instrument", instrument)
+                formData.append("keySignature", keySignature)
+                formData.append("timeSignature", timeSignature)
+                formData.append("isBargainBin", isBargainBin.toString())
+
+                if (collection === "new") {
+                    formData.append("collectionName", newCollectionName)
+                } else {
+                    formData.append("collectionId", collection)
+                }
+
+                // Upload riff first
+                const riffResponse = await riffApi.uploadRiff(formData)
+                const riffId = riffResponse.data.id
+
+                // Then mint as NFT
+                await nftApi.mintNFT({
+                    riffId,
+                    price: Number.parseFloat(price),
+                    currency,
+                    royaltyPercentage,
+                    enableStaking,
+                    customRoyaltyShare: enableStaking ? customRoyaltyShare : null,
+                    unlockables: {
+                        sourceFiles: unlockSourceFiles,
+                        remixRights: unlockRemixRights,
+                        privateMessages: unlockPrivateMessages,
+                        backstageContent: unlockBackstageContent,
+                    },
+                    useProfileDefaults,
+                })
                 toast({
                     title: "Minting Successful",
                     description: "Your riff has been minted as an NFT!",
@@ -384,7 +482,17 @@ export default function UploadPage() {
 
                 // Redirect to profile page
                 router.push("/profile")
-            }, 3000)
+            }
+        } catch (error) {
+            console.error("Error uploading/minting riff:", error)
+            toast({
+                variant: "destructive",
+                title: uploadType === "just-upload" ? "Upload Failed" : "Minting Failed",
+                description: "There was a problem processing your request. Please try again.",
+            })
+        } finally {
+            setIsUploading(false)
+            setIsMinting(false)
         }
     }
 
@@ -769,9 +877,20 @@ export default function UploadPage() {
                                                     <SelectValue placeholder="Select collection" />
                                                 </SelectTrigger>
                                                 <SelectContent className="bg-zinc-900 border-zinc-800">
-                                                    <SelectItem value="synthwave">Synthwave Sessions</SelectItem>
-                                                    <SelectItem value="guitar">Guitar Experiments</SelectItem>
-                                                    <SelectItem value="ambient">Ambient Textures</SelectItem>
+                                                    {isLoadingCollections ? (
+                                                        <div className="flex items-center justify-center p-2">
+                                                            <Loader2 className="h-4 w-4 animate-spin text-violet-500 mr-2" />
+                                                            <span>Loading collections...</span>
+                                                        </div>
+                                                    ) : collections.length > 0 ? (
+                                                        collections.map((col) => (
+                                                            <SelectItem key={col.id} value={col.id}>
+                                                                {col.name}
+                                                            </SelectItem>
+                                                        ))
+                                                    ) : (
+                                                        <div className="p-2 text-center text-zinc-500">No collections found</div>
+                                                    )}
                                                 </SelectContent>
                                             </Select>
                                         </div>
