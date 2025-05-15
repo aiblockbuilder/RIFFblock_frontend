@@ -27,6 +27,8 @@ export const userApi = {
     getUserRiffs: () => api.get("/users/riffs"),
     getUserCollections: () => api.get("/users/collections"),
     getUserStaking: () => api.get("/users/staking"),
+    getUserActivity: (userId?: string) => api.get(userId ? `/users/${userId}/activity` : "/users/activity"),
+    getFeaturedArtists: () => api.get("/users/featured"),
 }
 
 // Riff API
@@ -41,6 +43,10 @@ export const riffApi = {
         }),
     updateRiff: (id: string, data: any) => api.put(`/riffs/${id}`, data),
     deleteRiff: (id: string) => api.delete(`/riffs/${id}`),
+    likeRiff: (id: string) => api.post(`/riffs/${id}/like`),
+    unlikeRiff: (id: string) => api.delete(`/riffs/${id}/like`),
+    commentOnRiff: (id: string, comment: string) => api.post(`/riffs/${id}/comments`, { comment }),
+    getRiffComments: (id: string) => api.get(`/riffs/${id}/comments`),
 }
 
 // NFT API

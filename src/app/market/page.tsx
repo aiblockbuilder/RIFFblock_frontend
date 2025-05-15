@@ -29,14 +29,18 @@ import {
     ChevronLeft,
     ChevronRight,
     X,
+    Loader2,
+    AlertCircle,
 } from "lucide-react"
 import WalletConnect from "@/components/wallet-connect"
 import MainLayout from "@/components/layouts/main-layout"
 import VerticalLineWaveform from "@/components/vertical-line-waveform"
 import StringLights from "@/components/string-lights"
+import { useToast } from "@/hooks/use-toast"
+import { riffApi, userApi } from "@/services/api"
 
-// Import mock data
-import { featuredArtists, riffs, bargainRiffs, genres, moods, instruments } from "@/data/market-data"
+// Import fallback mock data for initial rendering and error states
+import { featuredArtists as mockFeaturedArtists, genres, moods, instruments } from "@/data/market-data"
 
 // Define types for our data
 interface Riff {
@@ -85,12 +89,121 @@ export default function MarketPage() {
     const [activeBin, setActiveBin] = useState<string | null>(null)
     const [showNowPlaying, setShowNowPlaying] = useState(false)
 
+    // New state for API data
+    const [riffs, setRiffs] = useState<Riff[]>([])
+    const [bargainRiffs, setBargainRiffs] = useState<Riff[]>([])
+    const [featuredArtists, setFeaturedArtists] = useState<Artist[]>(mockFeaturedArtists)
+    const [isLoading, setIsLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+
+    const { toast } = useToast()
+
     const audioRef = useRef<HTMLAudioElement>(null)
     const ambienceRef = useRef<HTMLAudioElement>(null)
     const vinylFlipRef = useRef<HTMLAudioElement>(null)
     const pathname = usePathname()
     const shelfRefs = useRef<Record<string, HTMLDivElement | null>>({})
     const filterSidebarRef = useRef<HTMLDivElement>(null)
+
+    // Fetch riffs from the backend
+    useEffect(() => {
+        const fetchRiffs = async () => {
+            setIsLoading(true)
+            setError(null)
+            try {
+                const response = await riffApi.getAllRiffs({
+                    genre: selectedGenre !== "All" ? selectedGenre : undefined,
+                    mood: selectedMood !== "All" ? selectedMood : undefined,
+                    instrument: selectedInstrument !== "All" ? selectedInstrument : undefined,
+                    minPrice: priceRange[0],
+                    maxPrice: priceRange[1],
+                    stakable: showStakableOnly ? true : undefined,
+                    backstage: showBackstageOnly ? true : undefined,
+                    unlockable: showUnlockableOnly ? true : undefined,
+                    sort: sortOption,
+                    search: searchQuery || undefined,
+                })
+
+                // Transform API response to match our Riff interface
+                const transformedRiffs = response.data.map((riff: any) => ({
+                    id: riff.id,
+                    title: riff.title,
+                    artist: riff.user?.username || "Unknown Artist",
+                    artistId: riff.userId,
+                    genre: riff.genre || "Uncategorized",
+                    mood: riff.mood,
+                    instrument: riff.instrument,
+                    price: riff.price || 0,
+                    currency: "RIFF",
+                    image: riff.coverArt || "/placeholder-38ei2.png",
+                    audio: riff.audioUrl,
+                    createdAt: riff.createdAt,
+                    stakable: riff.isStakable || false,
+                    backstage: riff.hasBackstageContent || false,
+                    unlockable: riff.hasUnlockableContent || false,
+                    tips: riff.tipCount || 0,
+                    description: riff.description,
+                }))
+
+                setRiffs(transformedRiffs)
+
+                // Set bargain riffs (lowest priced riffs)
+                const sortedByPrice = [...transformedRiffs].sort((a, b) => a.price - b.price)
+                setBargainRiffs(sortedByPrice.slice(0, 10))
+
+                setIsLoading(false)
+            } catch (err) {
+                console.error("Error fetching riffs:", err)
+                setError("Failed to load riffs. Please try again later.")
+                setIsLoading(false)
+                toast({
+                    title: "Error",
+                    description: "Failed to load riffs. Please try again later.",
+                    variant: "destructive",
+                })
+            }
+        }
+
+        fetchRiffs()
+    }, [
+        selectedGenre,
+        selectedMood,
+        selectedInstrument,
+        priceRange,
+        showStakableOnly,
+        showBackstageOnly,
+        showUnlockableOnly,
+        sortOption,
+        searchQuery,
+        toast,
+    ])
+
+    // Fetch featured artists
+    useEffect(() => {
+        const fetchFeaturedArtists = async () => {
+            try {
+                const response = await userApi.getFeaturedArtists()
+
+                if (response.data && response.data.length > 0) {
+                    // Transform API response to match our Artist interface
+                    const transformedArtists = response.data.map((artist: any) => ({
+                        id: artist.id,
+                        name: artist.username,
+                        image: artist.profileImage || "/placeholder-ynk6p.png",
+                        category: artist.category || "Trending Creators",
+                    }))
+
+                    // Group artists by category
+                    setFeaturedArtists(transformedArtists)
+                }
+            } catch (err) {
+                console.error("Error fetching featured artists:", err)
+                // Keep using mock data if API fails
+            }
+        }
+
+        fetchFeaturedArtists()
+    }, [])
 
     // Group featured artists by category
     const artistsByCategory = featuredArtists.reduce<Record<string, Artist[]>>((acc, artist) => {
@@ -398,47 +511,327 @@ export default function MarketPage() {
                     </div>
                 </div>
 
-                {/* Wall Display - Featured Artists & Curated Collections */}
-                <div className="container px-4 md:px-6 mb-12 relative z-10">
-                    <div className="relative">
-                        {/* Section header */}
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xl font-bold text-orange-100 font-serif">Wall Display</h2>
-                            <div className="flex gap-2">
-                                <button className="text-sm text-orange-200/70 hover:text-orange-100 transition-colors">View All</button>
+                {/* Loading state */}
+                {isLoading && (
+                    <div className="container px-4 md:px-6 py-12 relative z-10 flex items-center justify-center">
+                        <div className="flex flex-col items-center gap-4 bg-stone-900/80 backdrop-blur-sm p-8 rounded-lg border border-orange-800/30">
+                            <Loader2 className="h-8 w-8 text-orange-400 animate-spin" />
+                            <p className="text-orange-200">Loading the freshest beats...</p>
+                        </div>
+                    </div>
+                )}
+
+                {/* Error state */}
+                {error && !isLoading && (
+                    <div className="container px-4 md:px-6 py-12 relative z-10 flex items-center justify-center">
+                        <div className="flex flex-col items-center gap-4 bg-stone-900/80 backdrop-blur-sm p-8 rounded-lg border border-orange-800/30">
+                            <AlertCircle className="h-8 w-8 text-red-400" />
+                            <p className="text-orange-200">{error}</p>
+                            <Button onClick={() => window.location.reload()} className="bg-orange-700 hover:bg-orange-800 text-white">
+                                Try Again
+                            </Button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Content when data is loaded */}
+                {!isLoading && !error && (
+                    <>
+                        {/* Wall Display - Featured Artists & Curated Collections */}
+                        <div className="container px-4 md:px-6 mb-12 relative z-10">
+                            <div className="relative">
+                                {/* Section header */}
+                                <div className="flex items-center justify-between mb-4">
+                                    <h2 className="text-xl font-bold text-orange-100 font-serif">Wall Display</h2>
+                                    <div className="flex gap-2">
+                                        <button className="text-sm text-orange-200/70 hover:text-orange-100 transition-colors">
+                                            View All
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Shelves */}
+                                <div className="space-y-8">
+                                    {Object.entries(artistsByCategory).map(([category, artists], index) => (
+                                        <div
+                                            key={category}
+                                            className="space-y-3"
+                                            onMouseEnter={() => handleShelfHover(category)}
+                                            onMouseLeave={() => handleShelfHover(null)}
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                {category === "Trending Creators" && <TrendingUp size={16} className="text-orange-400" />}
+                                                {category === "Curated Themes" && <Sparkles size={16} className="text-orange-400" />}
+                                                {category === "Staff Picks" && <Star size={16} className="text-orange-400" />}
+                                                {category === "New Uploads This Week" && <Upload size={16} className="text-orange-400" />}
+                                                <h3 className="text-sm font-medium text-orange-200 font-serif">{category}</h3>
+                                            </div>
+
+                                            {/* Wooden shelf with albums */}
+                                            <div className="relative">
+                                                {/* Wooden shelf texture */}
+                                                <div className="absolute h-[120px] w-full wood-grain-pattern rounded-md opacity-90"></div>
+
+                                                {/* Shadow under shelf */}
+                                                <div className="absolute h-2 w-full bottom-0 bg-black/40 blur-sm"></div>
+
+                                                {/* Scroll buttons */}
+                                                <motion.button
+                                                    className={`absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-black/50 rounded-r-full p-1 text-orange-200/70 hover:text-orange-100 transition-colors ${activeShelf === category ? "opacity-100" : "opacity-0"
+                                                        }`}
+                                                    onClick={() => scrollShelf(category, "left")}
+                                                    whileHover={{ scale: 1.1 }}
+                                                    whileTap={{ scale: 0.9 }}
+                                                    style={{ transformOrigin: "center" }}
+                                                >
+                                                    <ChevronLeft size={25} />
+                                                </motion.button>
+
+                                                <motion.button
+                                                    className={`absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-black/50 rounded-l-full p-1 text-orange-200/70 hover:text-orange-100 transition-colors ${activeShelf === category ? "opacity-100" : "opacity-0"
+                                                        }`}
+                                                    onClick={() => scrollShelf(category, "right")}
+                                                    whileHover={{ scale: 1.1 }}
+                                                    whileTap={{ scale: 0.9 }}
+                                                    style={{ transformOrigin: "center" }}
+                                                >
+                                                    <ChevronRight size={25} />
+                                                </motion.button>
+
+                                                {/* Albums on shelf */}
+                                                <div
+                                                    className="relative overflow-x-auto py-2 no-scrollbar"
+                                                    ref={(el) => {
+                                                        shelfRefs.current[category] = el; // No return statement
+                                                    }}
+                                                >
+                                                    <div className="flex gap-4 px-2 pb-2 pt-1" style={{ width: "max-content" }}>
+                                                        {artists.map((artist) => (
+                                                            <motion.div
+                                                                key={artist.id}
+                                                                className="group relative w-[100px] cursor-pointer"
+                                                                onClick={() => openRiffDetail(artist as unknown as Riff)}
+                                                                whileHover={{
+                                                                    y: -5,
+                                                                    scale: 1.05,
+                                                                    transition: { type: "spring", stiffness: 300, damping: 10 },
+                                                                }}
+                                                                whileTap={{ scale: 0.95 }}
+                                                            >
+                                                                <div className="relative h-[100px] w-[100px] rounded-md overflow-hidden shadow-lg transform transition-transform group-hover:shadow-orange-500/20">
+                                                                    {/* Album cover */}
+                                                                    <Image
+                                                                        src={artist.image || "/placeholder.svg"}
+                                                                        alt={artist.name}
+                                                                        fill
+                                                                        className="object-cover"
+                                                                    />
+
+                                                                    {/* Vinyl record edge peeking out */}
+                                                                    <div className="absolute left-0 top-0 w-1 h-full bg-black"></div>
+
+                                                                    {/* Overlay gradient */}
+                                                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+
+                                                                    {/* Title */}
+                                                                    <div className="absolute bottom-2 left-2 right-2 text-xs font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                        {artist.name}
+                                                                    </div>
+                                                                </div>
+                                                            </motion.div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         </div>
 
-                        {/* Shelves */}
-                        <div className="space-y-8">
-                            {Object.entries(artistsByCategory).map(([category, artists], index) => (
-                                <div
-                                    key={category}
-                                    className="space-y-3"
-                                    onMouseEnter={() => handleShelfHover(category)}
-                                    onMouseLeave={() => handleShelfHover(null)}
-                                >
-                                    <div className="flex items-center gap-2">
-                                        {category === "Trending Creators" && <TrendingUp size={16} className="text-orange-400" />}
-                                        {category === "Curated Themes" && <Sparkles size={16} className="text-orange-400" />}
-                                        {category === "Staff Picks" && <Star size={16} className="text-orange-400" />}
-                                        {category === "New Uploads This Week" && <Upload size={16} className="text-orange-400" />}
-                                        <h3 className="text-sm font-medium text-orange-200 font-serif">{category}</h3>
+                        {/* Floor Bins - Genre/Tag Browsing */}
+                        <div className="container px-4 md:px-6 mb-12 relative z-10">
+                            <div className="relative">
+                                {/* Section header */}
+                                <div className="flex items-center justify-between mb-6">
+                                    <h2 className="text-xl font-bold text-orange-100 font-serif">Genre Crates</h2>
+                                    <div className="flex gap-2">
+                                        <motion.button
+                                            className={`text-sm px-3 py-1 rounded-full transition-colors ${selectedGenre === "All"
+                                                ? "bg-orange-500/30 text-orange-100 border border-orange-600/30"
+                                                : "bg-orange-900/20 text-orange-200/70 hover:bg-orange-800/30 hover:text-orange-100 border border-orange-800/30"
+                                                }`}
+                                            onClick={() => setSelectedGenre("All")}
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
+                                        >
+                                            All Genres
+                                        </motion.button>
                                     </div>
+                                </div>
 
-                                    {/* Wooden shelf with albums */}
-                                    <div className="relative">
-                                        {/* Wooden shelf texture */}
-                                        <div className="absolute h-[120px] w-full wood-grain-pattern rounded-md opacity-90"></div>
+                                {/* Genre crates */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                                    {genres.map((genre) => (
+                                        <motion.div
+                                            key={genre}
+                                            className={`relative overflow-hidden rounded-md cursor-pointer ${selectedGenre === genre
+                                                ? "ring-2 ring-orange-500/50 shadow-lg shadow-orange-500/20"
+                                                : "hover:shadow-md hover:shadow-orange-500/10"
+                                                }`}
+                                            onClick={() => {
+                                                setSelectedGenre(genre === selectedGenre ? "All" : genre)
+                                                playVinylFlipSound()
+                                            }}
+                                            whileHover={{ scale: 1.02 }}
+                                            whileTap={{ scale: 0.98 }}
+                                            style={{ transformOrigin: "center" }}
 
-                                        {/* Shadow under shelf */}
-                                        <div className="absolute h-2 w-full bottom-0 bg-black/40 blur-sm"></div>
+                                        >
+                                            {/* Wooden crate texture */}
+                                            <div className="absolute inset-0 wood-grain-pattern opacity-70"></div>
+
+                                            <div className="relative p-4 flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <Disc size={18} className="text-orange-400" />
+                                                    <span className="font-medium text-orange-100 font-serif">{genre}</span>
+                                                </div>
+                                                <span className="text-xs text-orange-200/70">
+                                                    {riffs.filter((riff) => riff.genre === genre).length} riffs
+                                                </span>
+                                            </div>
+                                        </motion.div>
+                                    ))}
+                                </div>
+
+                                {/* Riff cards in crates */}
+                                <div
+                                    className="relative overflow-hidden rounded-lg mb-8"
+                                    onMouseEnter={() => handleBinHover("genre")}
+                                    onMouseLeave={() => handleBinHover(null)}
+                                >
+                                    {/* Wooden crate texture */}
+                                    <div className="absolute inset-0 wood-grain-pattern opacity-70"></div>
+
+                                    <div className="relative p-4">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h3 className="font-medium text-orange-100 font-serif">
+                                                {selectedGenre === "All" ? "All Genres" : selectedGenre}
+                                            </h3>
+                                            <span className="text-xs text-orange-200/70">
+                                                {selectedGenre === "All" ? sortedRiffs.length : riffsByGenre[selectedGenre]?.length || 0} riffs
+                                            </span>
+                                        </div>
 
                                         {/* Scroll buttons */}
                                         <motion.button
-                                            className={`absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-black/50 rounded-r-full p-1 text-orange-200/70 hover:text-orange-100 transition-colors ${activeShelf === category ? "opacity-100" : "opacity-0"
+                                            className={`absolute left-4 top-1/2 z-10 bg-black/50 rounded-full p-1 text-orange-200/70 hover:text-orange-100 transition-colors ${activeBin === "genre" ? "opacity-100" : "opacity-0"}`}
+                                            onClick={() => {
+                                                const bin = document.getElementById("genre-bin")
+                                                if (bin) bin.scrollBy({ left: -300, behavior: "smooth" })
+                                                playVinylFlipSound()
+                                            }}
+                                            whileHover={{ scale: 1.1 }}
+                                            whileTap={{ scale: 0.9 }}
+                                        >
+                                            <ChevronLeft size={25} />
+                                        </motion.button>
+
+                                        <motion.button
+                                            className={`absolute right-4 top-1/2 -translate-y-1/2 z-10 bg-black/50 rounded-full p-1 text-orange-200/70 hover:text-orange-100 transition-colors ${activeBin === "genre" ? "opacity-100" : "opacity-0"
                                                 }`}
-                                            onClick={() => scrollShelf(category, "left")}
+                                            onClick={() => {
+                                                const bin = document.getElementById("genre-bin")
+                                                if (bin) bin.scrollBy({ left: 300, behavior: "smooth" })
+                                                playVinylFlipSound()
+                                            }}
+                                            whileHover={{ scale: 1.1 }}
+                                            whileTap={{ scale: 0.9 }}
+                                            style={{ transformOrigin: "center" }}
+                                        >
+                                            <ChevronRight size={25} />
+                                        </motion.button>
+
+                                        {/* Horizontally scrollable bin content */}
+                                        <div id="genre-bin" className="overflow-x-auto no-scrollbar">
+                                            <div className="flex gap-4 pb-2" style={{ width: "max-content" }}>
+                                                {(selectedGenre === "All" ? sortedRiffs : riffsByGenre[selectedGenre] || []).map((riff) => (
+                                                    <AlbumCard
+                                                        key={riff.id}
+                                                        riff={riff}
+                                                        isPlaying={currentAudio?.id === riff.id && isPlaying}
+                                                        onPlay={(e) => togglePlay(riff, e)}
+                                                        onClick={() => openRiffDetail(riff)}
+                                                        onFlip={playVinylFlipSound}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Mood Bins */}
+                        <div className="container px-4 md:px-6 mb-12 relative z-10">
+                            <div className="relative">
+                                {/* Section header */}
+                                <div className="flex items-center justify-between mb-6">
+                                    <h2 className="text-xl font-bold text-orange-100 font-serif">Mood Crates</h2>
+                                    <div className="flex gap-2">
+                                        <motion.button
+                                            className={`text-sm px-3 py-1 rounded-full transition-colors ${selectedMood === "All"
+                                                ? "bg-orange-500/30 text-orange-100 border border-orange-600/30"
+                                                : "bg-orange-900/20 text-orange-200/70 hover:bg-orange-800/30 hover:text-orange-100 border border-orange-800/30"
+                                                }`}
+                                            onClick={() => setSelectedMood("All")}
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
+                                        >
+                                            All Moods
+                                        </motion.button>
+                                    </div>
+                                </div>
+
+                                {/* Mood crates */}
+                                <div
+                                    className="relative overflow-hidden rounded-lg mb-8"
+                                    onMouseEnter={() => handleBinHover("mood")}
+                                    onMouseLeave={() => handleBinHover(null)}
+                                >
+                                    {/* Wooden crate texture */}
+                                    <div className="absolute inset-0 wood-grain-pattern opacity-70"></div>
+
+                                    <div className="relative p-4">
+                                        <div className="flex items-center gap-4 mb-4 overflow-x-auto no-scrollbar">
+                                            {moods.map((mood) => (
+                                                <motion.button
+                                                    key={mood}
+                                                    className={`px-3 py-1 rounded-full whitespace-nowrap ${selectedMood === mood
+                                                        ? "bg-orange-500/30 text-orange-100 border border-orange-600/30"
+                                                        : "bg-orange-900/20 text-orange-200/70 hover:bg-orange-800/30 hover:text-orange-100 border border-orange-800/30"
+                                                        }`}
+                                                    onClick={() => {
+                                                        setSelectedMood(mood === selectedMood ? "All" : mood)
+                                                        playVinylFlipSound()
+                                                    }}
+                                                    whileHover={{ scale: 1.05 }}
+                                                    whileTap={{ scale: 0.95 }}
+                                                >
+                                                    {mood}
+                                                </motion.button>
+                                            ))}
+                                        </div>
+
+                                        {/* Scroll buttons */}
+                                        <motion.button
+                                            className={`absolute left-4 top-1/2 -translate-y-1/2 z-10 bg-black/50 rounded-full p-1 text-orange-200/70 hover:text-orange-100 transition-colors ${activeBin === "mood" ? "opacity-100" : "opacity-0"
+                                                }`}
+                                            onClick={() => {
+                                                const bin = document.getElementById("mood-bin")
+                                                if (bin) bin.scrollBy({ left: -300, behavior: "smooth" })
+                                                playVinylFlipSound()
+                                            }}
                                             whileHover={{ scale: 1.1 }}
                                             whileTap={{ scale: 0.9 }}
                                             style={{ transformOrigin: "center" }}
@@ -447,9 +840,13 @@ export default function MarketPage() {
                                         </motion.button>
 
                                         <motion.button
-                                            className={`absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-black/50 rounded-l-full p-1 text-orange-200/70 hover:text-orange-100 transition-colors ${activeShelf === category ? "opacity-100" : "opacity-0"
+                                            className={`absolute right-4 top-1/2 -translate-y-1/2 z-10 bg-black/50 rounded-full p-1 text-orange-200/70 hover:text-orange-100 transition-colors ${activeBin === "mood" ? "opacity-100" : "opacity-0"
                                                 }`}
-                                            onClick={() => scrollShelf(category, "right")}
+                                            onClick={() => {
+                                                const bin = document.getElementById("mood-bin")
+                                                if (bin) bin.scrollBy({ left: 300, behavior: "smooth" })
+                                                playVinylFlipSound()
+                                            }}
                                             whileHover={{ scale: 1.1 }}
                                             whileTap={{ scale: 0.9 }}
                                             style={{ transformOrigin: "center" }}
@@ -457,369 +854,184 @@ export default function MarketPage() {
                                             <ChevronRight size={25} />
                                         </motion.button>
 
-                                        {/* Albums on shelf */}
-                                        <div
-                                            className="relative overflow-x-auto py-2 no-scrollbar"
-                                            ref={(el) => {
-                                                shelfRefs.current[category] = el; // No return statement
-                                            }}
-                                        >
-                                            <div className="flex gap-4 px-2 pb-2 pt-1" style={{ width: "max-content" }}>
-                                                {artists.map((artist) => (
-                                                    <motion.div
-                                                        key={artist.id}
-                                                        className="group relative w-[100px] cursor-pointer"
-                                                        onClick={() => openRiffDetail(artist as unknown as Riff)}
-                                                        whileHover={{
-                                                            y: -5,
-                                                            scale: 1.05,
-                                                            transition: { type: "spring", stiffness: 300, damping: 10 },
-                                                        }}
-                                                        whileTap={{ scale: 0.95 }}
-                                                    >
-                                                        <div className="relative h-[100px] w-[100px] rounded-md overflow-hidden shadow-lg transform transition-transform group-hover:shadow-orange-500/20">
-                                                            {/* Album cover */}
-                                                            <Image
-                                                                src={artist.image || "/placeholder.svg"}
-                                                                alt={artist.name}
-                                                                fill
-                                                                className="object-cover"
-                                                            />
-
-                                                            {/* Vinyl record edge peeking out */}
-                                                            <div className="absolute left-0 top-0 w-1 h-full bg-black"></div>
-
-                                                            {/* Overlay gradient */}
-                                                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-
-                                                            {/* Title */}
-                                                            <div className="absolute bottom-2 left-2 right-2 text-xs font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                {artist.name}
-                                                            </div>
-                                                        </div>
-                                                    </motion.div>
+                                        {/* Horizontally scrollable bin content */}
+                                        <div id="mood-bin" className="overflow-x-auto no-scrollbar">
+                                            <div className="flex gap-4 pb-2" style={{ width: "max-content" }}>
+                                                {(selectedMood === "All" ? sortedRiffs : riffsByMood[selectedMood] || []).map((riff) => (
+                                                    <AlbumCard
+                                                        key={riff.id}
+                                                        riff={riff}
+                                                        isPlaying={currentAudio?.id === riff.id && isPlaying}
+                                                        onPlay={(e) => togglePlay(riff, e)}
+                                                        onClick={() => openRiffDetail(riff)}
+                                                        onFlip={playVinylFlipSound}
+                                                    />
                                                 ))}
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Floor Bins - Genre/Tag Browsing */}
-                <div className="container px-4 md:px-6 mb-12 relative z-10">
-                    <div className="relative">
-                        {/* Section header */}
-                        <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-xl font-bold text-orange-100 font-serif">Genre Crates</h2>
-                            <div className="flex gap-2">
-                                <motion.button
-                                    className={`text-sm px-3 py-1 rounded-full transition-colors ${selectedGenre === "All"
-                                        ? "bg-orange-500/30 text-orange-100 border border-orange-600/30"
-                                        : "bg-orange-900/20 text-orange-200/70 hover:bg-orange-800/30 hover:text-orange-100 border border-orange-800/30"
-                                        }`}
-                                    onClick={() => setSelectedGenre("All")}
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                >
-                                    All Genres
-                                </motion.button>
                             </div>
                         </div>
 
-                        {/* Genre crates */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                            {genres.map((genre) => (
-                                <motion.div
-                                    key={genre}
-                                    className={`relative overflow-hidden rounded-md cursor-pointer ${selectedGenre === genre
-                                        ? "ring-2 ring-orange-500/50 shadow-lg shadow-orange-500/20"
-                                        : "hover:shadow-md hover:shadow-orange-500/10"
-                                        }`}
-                                    onClick={() => {
-                                        setSelectedGenre(genre === selectedGenre ? "All" : genre)
-                                        playVinylFlipSound()
-                                    }}
-                                    whileHover={{ scale: 1.02 }}
-                                    whileTap={{ scale: 0.98 }}
-                                    style={{ transformOrigin: "center" }}
+                        {/* Instrument Bins */}
+                        <div className="container px-4 md:px-6 mb-12 relative z-10">
+                            <div className="relative">
+                                {/* Section header */}
+                                <div className="flex items-center justify-between mb-6">
+                                    <h2 className="text-xl font-bold text-orange-100 font-serif">Instrument Crates</h2>
+                                    <div className="flex gap-2">
+                                        <motion.button
+                                            className={`text-sm px-3 py-1 rounded-full transition-colors ${selectedInstrument === "All"
+                                                ? "bg-orange-500/30 text-orange-100 border border-orange-600/30"
+                                                : "bg-orange-900/20 text-orange-200/70 hover:bg-orange-800/30 hover:text-orange-100 border border-orange-800/30"
+                                                }`}
+                                            onClick={() => setSelectedInstrument("All")}
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
+                                        >
+                                            All Instruments
+                                        </motion.button>
+                                    </div>
+                                </div>
 
+                                {/* Instrument crates */}
+                                <div
+                                    className="relative overflow-hidden rounded-lg mb-8"
+                                    onMouseEnter={() => handleBinHover("instrument")}
+                                    onMouseLeave={() => handleBinHover(null)}
                                 >
                                     {/* Wooden crate texture */}
                                     <div className="absolute inset-0 wood-grain-pattern opacity-70"></div>
 
-                                    <div className="relative p-4 flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <Disc size={18} className="text-orange-400" />
-                                            <span className="font-medium text-orange-100 font-serif">{genre}</span>
+                                    <div className="relative p-4">
+                                        <div className="flex items-center gap-4 mb-4 overflow-x-auto no-scrollbar">
+                                            {instruments.map((instrument) => (
+                                                <motion.button
+                                                    key={instrument}
+                                                    className={`px-3 py-1 rounded-full whitespace-nowrap ${selectedInstrument === instrument
+                                                        ? "bg-orange-500/30 text-orange-100 border border-orange-600/30"
+                                                        : "bg-orange-900/20 text-orange-200/70 hover:bg-orange-800/30 hover:text-orange-100 border border-orange-800/30"
+                                                        }`}
+                                                    onClick={() => {
+                                                        setSelectedInstrument(instrument === selectedInstrument ? "All" : instrument)
+                                                        playVinylFlipSound()
+                                                    }}
+                                                    whileHover={{ scale: 1.05 }}
+                                                    whileTap={{ scale: 0.95 }}
+                                                >
+                                                    {instrument}
+                                                </motion.button>
+                                            ))}
                                         </div>
-                                        <span className="text-xs text-orange-200/70">
-                                            {riffs.filter((riff) => riff.genre === genre).length} riffs
-                                        </span>
-                                    </div>
-                                </motion.div>
-                            ))}
-                        </div>
 
-                        {/* Riff cards in crates */}
-                        <div
-                            className="relative overflow-hidden rounded-lg mb-8"
-                            onMouseEnter={() => handleBinHover("genre")}
-                            onMouseLeave={() => handleBinHover(null)}
-                        >
-                            {/* Wooden crate texture */}
-                            <div className="absolute inset-0 wood-grain-pattern opacity-70"></div>
-
-                            <div className="relative p-4">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h3 className="font-medium text-orange-100 font-serif">
-                                        {selectedGenre === "All" ? "All Genres" : selectedGenre}
-                                    </h3>
-                                    <span className="text-xs text-orange-200/70">
-                                        {selectedGenre === "All" ? sortedRiffs.length : riffsByGenre[selectedGenre]?.length || 0} riffs
-                                    </span>
-                                </div>
-
-                                {/* Scroll buttons */}
-                                <motion.button
-                                    className={`absolute left-4 top-1/2 z-10 bg-black/50 rounded-full p-1 text-orange-200/70 hover:text-orange-100 transition-colors ${activeBin === "genre" ? "opacity-100" : "opacity-0"}`}
-                                    onClick={() => {
-                                        const bin = document.getElementById("genre-bin")
-                                        if (bin) bin.scrollBy({ left: -300, behavior: "smooth" })
-                                        playVinylFlipSound()
-                                    }}
-                                    whileHover={{ scale: 1.1 }}
-                                    whileTap={{ scale: 0.9 }}
-                                >
-                                    <ChevronLeft size={25} />
-                                </motion.button>
-
-                                <motion.button
-                                    className={`absolute right-4 top-1/2 -translate-y-1/2 z-10 bg-black/50 rounded-full p-1 text-orange-200/70 hover:text-orange-100 transition-colors ${activeBin === "genre" ? "opacity-100" : "opacity-0"
-                                        }`}
-                                    onClick={() => {
-                                        const bin = document.getElementById("genre-bin")
-                                        if (bin) bin.scrollBy({ left: 300, behavior: "smooth" })
-                                        playVinylFlipSound()
-                                    }}
-                                    whileHover={{ scale: 1.1 }}
-                                    whileTap={{ scale: 0.9 }}
-                                    style={{ transformOrigin: "center" }}
-                                >
-                                    <ChevronRight size={25} />
-                                </motion.button>
-
-                                {/* Horizontally scrollable bin content */}
-                                <div id="genre-bin" className="overflow-x-auto no-scrollbar">
-                                    <div className="flex gap-4 pb-2" style={{ width: "max-content" }}>
-                                        {(selectedGenre === "All" ? sortedRiffs : riffsByGenre[selectedGenre] || []).map((riff) => (
-                                            <AlbumCard
-                                                key={riff.id}
-                                                riff={riff}
-                                                isPlaying={currentAudio?.id === riff.id && isPlaying}
-                                                onPlay={(e) => togglePlay(riff, e)}
-                                                onClick={() => openRiffDetail(riff)}
-                                                onFlip={playVinylFlipSound}
-                                            />
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Mood Bins */}
-                <div className="container px-4 md:px-6 mb-12 relative z-10">
-                    <div className="relative">
-                        {/* Section header */}
-                        <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-xl font-bold text-orange-100 font-serif">Mood Crates</h2>
-                            <div className="flex gap-2">
-                                <motion.button
-                                    className={`text-sm px-3 py-1 rounded-full transition-colors ${selectedMood === "All"
-                                        ? "bg-orange-500/30 text-orange-100 border border-orange-600/30"
-                                        : "bg-orange-900/20 text-orange-200/70 hover:bg-orange-800/30 hover:text-orange-100 border border-orange-800/30"
-                                        }`}
-                                    onClick={() => setSelectedMood("All")}
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                >
-                                    All Moods
-                                </motion.button>
-                            </div>
-                        </div>
-
-                        {/* Mood crates */}
-                        <div
-                            className="relative overflow-hidden rounded-lg mb-8"
-                            onMouseEnter={() => handleBinHover("mood")}
-                            onMouseLeave={() => handleBinHover(null)}
-                        >
-                            {/* Wooden crate texture */}
-                            <div className="absolute inset-0 wood-grain-pattern opacity-70"></div>
-
-                            <div className="relative p-4">
-                                <div className="flex items-center gap-4 mb-4 overflow-x-auto no-scrollbar">
-                                    {moods.map((mood) => (
+                                        {/* Scroll buttons */}
                                         <motion.button
-                                            key={mood}
-                                            className={`px-3 py-1 rounded-full whitespace-nowrap ${selectedMood === mood
-                                                ? "bg-orange-500/30 text-orange-100 border border-orange-600/30"
-                                                : "bg-orange-900/20 text-orange-200/70 hover:bg-orange-800/30 hover:text-orange-100 border border-orange-800/30"
+                                            className={`absolute left-4 top-1/2 -translate-y-1/2 z-10 bg-black/50 rounded-full p-1 text-orange-200/70 hover:text-orange-100 transition-colors ${activeBin === "instrument" ? "opacity-100" : "opacity-0"
                                                 }`}
                                             onClick={() => {
-                                                setSelectedMood(mood === selectedMood ? "All" : mood)
+                                                const bin = document.getElementById("instrument-bin")
+                                                if (bin) bin.scrollBy({ left: -300, behavior: "smooth" })
                                                 playVinylFlipSound()
                                             }}
-                                            whileHover={{ scale: 1.05 }}
-                                            whileTap={{ scale: 0.95 }}
+                                            whileHover={{ scale: 1.1 }}
+                                            whileTap={{ scale: 0.9 }}
+                                            style={{ transformOrigin: "center" }}
                                         >
-                                            {mood}
+                                            <ChevronLeft size={25} />
                                         </motion.button>
-                                    ))}
-                                </div>
 
-                                {/* Scroll buttons */}
-                                <motion.button
-                                    className={`absolute left-4 top-1/2 -translate-y-1/2 z-10 bg-black/50 rounded-full p-1 text-orange-200/70 hover:text-orange-100 transition-colors ${activeBin === "mood" ? "opacity-100" : "opacity-0"
-                                        }`}
-                                    onClick={() => {
-                                        const bin = document.getElementById("mood-bin")
-                                        if (bin) bin.scrollBy({ left: -300, behavior: "smooth" })
-                                        playVinylFlipSound()
-                                    }}
-                                    whileHover={{ scale: 1.1 }}
-                                    whileTap={{ scale: 0.9 }}
-                                    style={{ transformOrigin: "center" }}
-                                >
-                                    <ChevronLeft size={25} />
-                                </motion.button>
+                                        <motion.button
+                                            className={`absolute right-4 top-1/2 -translate-y-1/2 z-10 bg-black/50 rounded-full p-1 text-orange-200/70 hover:text-orange-100 transition-colors ${activeBin === "instrument" ? "opacity-100" : "opacity-0"
+                                                }`}
+                                            onClick={() => {
+                                                const bin = document.getElementById("instrument-bin")
+                                                if (bin) bin.scrollBy({ left: 300, behavior: "smooth" })
+                                                playVinylFlipSound()
+                                            }}
+                                            whileHover={{ scale: 1.1 }}
+                                            whileTap={{ scale: 0.9 }}
+                                            style={{ transformOrigin: "center" }}
+                                        >
+                                            <ChevronRight size={25} />
+                                        </motion.button>
 
-                                <motion.button
-                                    className={`absolute right-4 top-1/2 -translate-y-1/2 z-10 bg-black/50 rounded-full p-1 text-orange-200/70 hover:text-orange-100 transition-colors ${activeBin === "mood" ? "opacity-100" : "opacity-0"
-                                        }`}
-                                    onClick={() => {
-                                        const bin = document.getElementById("mood-bin")
-                                        if (bin) bin.scrollBy({ left: 300, behavior: "smooth" })
-                                        playVinylFlipSound()
-                                    }}
-                                    whileHover={{ scale: 1.1 }}
-                                    whileTap={{ scale: 0.9 }}
-                                    style={{ transformOrigin: "center" }}
-                                >
-                                    <ChevronRight size={25} />
-                                </motion.button>
-
-                                {/* Horizontally scrollable bin content */}
-                                <div id="mood-bin" className="overflow-x-auto no-scrollbar">
-                                    <div className="flex gap-4 pb-2" style={{ width: "max-content" }}>
-                                        {(selectedMood === "All" ? sortedRiffs : riffsByMood[selectedMood] || []).map((riff) => (
-                                            <AlbumCard
-                                                key={riff.id}
-                                                riff={riff}
-                                                isPlaying={currentAudio?.id === riff.id && isPlaying}
-                                                onPlay={(e) => togglePlay(riff, e)}
-                                                onClick={() => openRiffDetail(riff)}
-                                                onFlip={playVinylFlipSound}
-                                            />
-                                        ))}
+                                        {/* Horizontally scrollable bin content */}
+                                        <div id="instrument-bin" className="overflow-x-auto no-scrollbar">
+                                            <div className="flex gap-4 pb-2" style={{ width: "max-content" }}>
+                                                {(selectedInstrument === "All" ? sortedRiffs : riffsByInstrument[selectedInstrument] || []).map(
+                                                    (riff) => (
+                                                        <AlbumCard
+                                                            key={riff.id}
+                                                            riff={riff}
+                                                            isPlaying={currentAudio?.id === riff.id && isPlaying}
+                                                            onPlay={(e) => togglePlay(riff, e)}
+                                                            onClick={() => openRiffDetail(riff)}
+                                                            onFlip={playVinylFlipSound}
+                                                        />
+                                                    ),
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </div>
 
-                {/* Instrument Bins */}
-                <div className="container px-4 md:px-6 mb-12 relative z-10">
-                    <div className="relative">
-                        {/* Section header */}
-                        <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-xl font-bold text-orange-100 font-serif">Instrument Crates</h2>
-                            <div className="flex gap-2">
-                                <motion.button
-                                    className={`text-sm px-3 py-1 rounded-full transition-colors ${selectedInstrument === "All"
-                                        ? "bg-orange-500/30 text-orange-100 border border-orange-600/30"
-                                        : "bg-orange-900/20 text-orange-200/70 hover:bg-orange-800/30 hover:text-orange-100 border border-orange-800/30"
-                                        }`}
-                                    onClick={() => setSelectedInstrument("All")}
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                >
-                                    All Instruments
-                                </motion.button>
-                            </div>
-                        </div>
+                        {/* Bargain Bin */}
+                        <div className="container px-4 md:px-6 mb-12 relative z-10">
+                            <div
+                                className="relative overflow-hidden rounded-lg"
+                                onMouseEnter={() => handleBinHover("bargain")}
+                                onMouseLeave={() => handleBinHover(null)}
+                            >
+                                {/* Wooden crate texture with special styling */}
+                                <div className="absolute inset-0 wood-grain-pattern opacity-70"></div>
 
-                        {/* Instrument crates */}
-                        <div
-                            className="relative overflow-hidden rounded-lg mb-8"
-                            onMouseEnter={() => handleBinHover("instrument")}
-                            onMouseLeave={() => handleBinHover(null)}
-                        >
-                            {/* Wooden crate texture */}
-                            <div className="absolute inset-0 wood-grain-pattern opacity-70"></div>
-
-                            <div className="relative p-4">
-                                <div className="flex items-center gap-4 mb-4 overflow-x-auto no-scrollbar">
-                                    {instruments.map((instrument) => (
-                                        <motion.button
-                                            key={instrument}
-                                            className={`px-3 py-1 rounded-full whitespace-nowrap ${selectedInstrument === instrument
-                                                ? "bg-orange-500/30 text-orange-100 border border-orange-600/30"
-                                                : "bg-orange-900/20 text-orange-200/70 hover:bg-orange-800/30 hover:text-orange-100 border border-orange-800/30"
-                                                }`}
-                                            onClick={() => {
-                                                setSelectedInstrument(instrument === selectedInstrument ? "All" : instrument)
-                                                playVinylFlipSound()
-                                            }}
-                                            whileHover={{ scale: 1.05 }}
-                                            whileTap={{ scale: 0.95 }}
-                                        >
-                                            {instrument}
-                                        </motion.button>
-                                    ))}
+                                {/* Worn sticker effect */}
+                                <div className="absolute top-0 left-10 transform -rotate-6 bg-red-500/80 px-4 py-1 rounded-sm z-10 shadow-md">
+                                    <span className="text-white font-bold text-sm">BARGAIN BIN</span>
                                 </div>
 
-                                {/* Scroll buttons */}
-                                <motion.button
-                                    className={`absolute left-4 top-1/2 -translate-y-1/2 z-10 bg-black/50 rounded-full p-1 text-orange-200/70 hover:text-orange-100 transition-colors ${activeBin === "instrument" ? "opacity-100" : "opacity-0"
-                                        }`}
-                                    onClick={() => {
-                                        const bin = document.getElementById("instrument-bin")
-                                        if (bin) bin.scrollBy({ left: -300, behavior: "smooth" })
-                                        playVinylFlipSound()
-                                    }}
-                                    whileHover={{ scale: 1.1 }}
-                                    whileTap={{ scale: 0.9 }}
-                                    style={{ transformOrigin: "center" }}
-                                >
-                                    <ChevronLeft size={25} />
-                                </motion.button>
+                                <div className="relative p-4 pt-8">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <Sparkles size={18} className="text-orange-400" />
+                                        <h3 className="font-medium text-orange-100 font-serif">Discover Underrated Gems</h3>
+                                    </div>
 
-                                <motion.button
-                                    className={`absolute right-4 top-1/2 -translate-y-1/2 z-10 bg-black/50 rounded-full p-1 text-orange-200/70 hover:text-orange-100 transition-colors ${activeBin === "instrument" ? "opacity-100" : "opacity-0"
-                                        }`}
-                                    onClick={() => {
-                                        const bin = document.getElementById("instrument-bin")
-                                        if (bin) bin.scrollBy({ left: 300, behavior: "smooth" })
-                                        playVinylFlipSound()
-                                    }}
-                                    whileHover={{ scale: 1.1 }}
-                                    whileTap={{ scale: 0.9 }}
-                                    style={{ transformOrigin: "center" }}
-                                >
-                                    <ChevronRight size={25} />
-                                </motion.button>
+                                    {/* Scroll buttons */}
+                                    <motion.button
+                                        className={`absolute left-4 top-1/2 -translate-y-1/2 z-10 bg-black/50 rounded-full p-1 text-orange-200/70 hover:text-orange-100 transition-colors ${activeBin === "bargain" ? "opacity-100" : "opacity-0"
+                                            }`}
+                                        onClick={() => {
+                                            const bin = document.getElementById("bargain-bin")
+                                            if (bin) bin.scrollBy({ left: -300, behavior: "smooth" })
+                                            playVinylFlipSound()
+                                        }}
+                                        whileHover={{ scale: 1.1 }}
+                                        whileTap={{ scale: 0.9 }}
+                                    >
+                                        <ChevronLeft size={25} />
+                                    </motion.button>
 
-                                {/* Horizontally scrollable bin content */}
-                                <div id="instrument-bin" className="overflow-x-auto no-scrollbar">
-                                    <div className="flex gap-4 pb-2" style={{ width: "max-content" }}>
-                                        {(selectedInstrument === "All" ? sortedRiffs : riffsByInstrument[selectedInstrument] || []).map(
-                                            (riff) => (
+                                    <motion.button
+                                        className={`absolute right-4 top-1/2 -translate-y-1/2 z-10 bg-black/50 rounded-full p-1 text-orange-200/70 hover:text-orange-100 transition-colors ${activeBin === "bargain" ? "opacity-100" : "opacity-0"
+                                            }`}
+                                        onClick={() => {
+                                            const bin = document.getElementById("bargain-bin")
+                                            if (bin) bin.scrollBy({ left: 300, behavior: "smooth" })
+                                            playVinylFlipSound()
+                                        }}
+                                        whileHover={{ scale: 1.1 }}
+                                        whileTap={{ scale: 0.9 }}
+                                    >
+                                        <ChevronRight size={25} />
+                                    </motion.button>
+
+                                    {/* Horizontally scrollable bin content */}
+                                    <div id="bargain-bin" className="overflow-x-auto no-scrollbar">
+                                        <div className="flex gap-4 pb-2" style={{ width: "max-content" }}>
+                                            {bargainRiffs.map((riff) => (
                                                 <AlbumCard
                                                     key={riff.id}
                                                     riff={riff}
@@ -827,85 +1039,16 @@ export default function MarketPage() {
                                                     onPlay={(e) => togglePlay(riff, e)}
                                                     onClick={() => openRiffDetail(riff)}
                                                     onFlip={playVinylFlipSound}
+                                                    isBargain
                                                 />
-                                            ),
-                                        )}
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </div>
-
-                {/* Bargain Bin */}
-                <div className="container px-4 md:px-6 mb-12 relative z-10">
-                    <div
-                        className="relative overflow-hidden rounded-lg"
-                        onMouseEnter={() => handleBinHover("bargain")}
-                        onMouseLeave={() => handleBinHover(null)}
-                    >
-                        {/* Wooden crate texture with special styling */}
-                        <div className="absolute inset-0 wood-grain-pattern opacity-70"></div>
-
-                        {/* Worn sticker effect */}
-                        <div className="absolute top-0 left-10 transform -rotate-6 bg-red-500/80 px-4 py-1 rounded-sm z-10 shadow-md">
-                            <span className="text-white font-bold text-sm">BARGAIN BIN</span>
-                        </div>
-
-                        <div className="relative p-4 pt-8">
-                            <div className="flex items-center gap-2 mb-4">
-                                <Sparkles size={18} className="text-orange-400" />
-                                <h3 className="font-medium text-orange-100 font-serif">Discover Underrated Gems</h3>
-                            </div>
-
-                            {/* Scroll buttons */}
-                            <motion.button
-                                className={`absolute left-4 top-1/2 -translate-y-1/2 z-10 bg-black/50 rounded-full p-1 text-orange-200/70 hover:text-orange-100 transition-colors ${activeBin === "bargain" ? "opacity-100" : "opacity-0"
-                                    }`}
-                                onClick={() => {
-                                    const bin = document.getElementById("bargain-bin")
-                                    if (bin) bin.scrollBy({ left: -300, behavior: "smooth" })
-                                    playVinylFlipSound()
-                                }}
-                                whileHover={{ scale: 1.1 }}
-                                whileTap={{ scale: 0.9 }}
-                            >
-                                <ChevronLeft size={25} />
-                            </motion.button>
-
-                            <motion.button
-                                className={`absolute right-4 top-1/2 -translate-y-1/2 z-10 bg-black/50 rounded-full p-1 text-orange-200/70 hover:text-orange-100 transition-colors ${activeBin === "bargain" ? "opacity-100" : "opacity-0"
-                                    }`}
-                                onClick={() => {
-                                    const bin = document.getElementById("bargain-bin")
-                                    if (bin) bin.scrollBy({ left: 300, behavior: "smooth" })
-                                    playVinylFlipSound()
-                                }}
-                                whileHover={{ scale: 1.1 }}
-                                whileTap={{ scale: 0.9 }}
-                            >
-                                <ChevronRight size={25} />
-                            </motion.button>
-
-                            {/* Horizontally scrollable bin content */}
-                            <div id="bargain-bin" className="overflow-x-auto no-scrollbar">
-                                <div className="flex gap-4 pb-2" style={{ width: "max-content" }}>
-                                    {bargainRiffs.map((riff) => (
-                                        <AlbumCard
-                                            key={riff.id}
-                                            riff={riff}
-                                            isPlaying={currentAudio?.id === riff.id && isPlaying}
-                                            onPlay={(e) => togglePlay(riff, e)}
-                                            onClick={() => openRiffDetail(riff)}
-                                            onFlip={playVinylFlipSound}
-                                            isBargain
-                                        />
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                    </>
+                )}
 
                 {/* Filter sidebar */}
                 <AnimatePresence>
