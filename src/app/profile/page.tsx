@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react"
 import { useWallet } from "@/contexts/wallet-context"
-import { useApi } from "@/contexts/api-context"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Music, Users, Settings, Edit, Loader2 } from "lucide-react"
@@ -15,82 +14,32 @@ import StakingSettings from "@/components/profile/staking-settings"
 import FavoriteRiffs from "@/components/profile/favorite-riffs"
 import MainLayout from "@/components/layouts/main-layout"
 import CreativeGradientBackground from "@/components/creative-gradient-background"
+import apiService from "@/services/api"
 
 export default function ProfilePage() {
-    const { isConnected, walletAddress } = useWallet()
-    const { user } = useApi()
+    const { isConnected, walletAddress, userProfile, refreshProfile } = useWallet()
     const [isEditing, setIsEditing] = useState(false)
     const [activeTab, setActiveTab] = useState("music")
 
-    const [profile, setProfile] = useState<any>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
 
     // Fetch profile data
     useEffect(() => {
-        const fetchProfile = async () => {
-            if (!isConnected) {
-                // Use mock data if not connected
-                setProfile({
-                    name: "SYNTHWAVE_92",
-                    bio: "Creating retro-futuristic soundscapes inspired by 80s synth culture and cyberpunk aesthetics. Specializing in atmospheric pads, arpeggiated sequences, and driving basslines.",
-                    location: "Los Angeles, CA",
-                    avatar: "/neon-profile.png",
-                    coverImage: "/profile-cover-image.jpg",
-                    ensName: "synthwave92.eth",
-                    socialLinks: {
-                        twitter: "https://twitter.com/synthwave92",
-                        instagram: "https://instagram.com/synthwave92",
-                        website: "https://synthwave92.com",
-                        bandcamp: "https://synthwave92.bandcamp.com",
-                    },
-                    genres: ["Synthwave", "Retrowave", "Electronic"],
-                    influences: ["Tangerine Dream", "John Carpenter", "Vangelis"],
-                    stats: {
-                        totalRiffs: 42,
-                        totalTips: 24350,
-                        totalStaked: 156000,
-                        followers: 1289,
-                    },
-                })
-                setIsLoading(false)
-                return
-            }
+        const loadProfile = async () => {
+            setIsLoading(true)
 
             try {
-                setIsLoading(true)
-                const { data } = await user.getProfile()
-
-                if (data) {
-                    setProfile(data)
-                } else {
-                    // Fallback to mock data if API returns empty
-                    setProfile({
-                        name: "SYNTHWAVE_92",
-                        bio: "Creating retro-futuristic soundscapes inspired by 80s synth culture and cyberpunk aesthetics. Specializing in atmospheric pads, arpeggiated sequences, and driving basslines.",
-                        location: "Los Angeles, CA",
-                        avatar: "/neon-profile.png",
-                        coverImage: "/placeholder.svg?key=dvkto",
-                        ensName: "synthwave92.eth",
-                        walletAddress,
-                        socialLinks: {
-                            twitter: "https://twitter.com/synthwave92",
-                            instagram: "https://instagram.com/synthwave92",
-                            website: "https://synthwave92.com",
-                        },
-                        genres: ["Synthwave", "Retrowave", "Electronic"],
-                        influences: ["Tangerine Dream", "John Carpenter", "Vangelis"],
-                        stats: {
-                            totalRiffs: 42,
-                            totalTips: 24350,
-                            totalStaked: 156000,
-                            followers: 1289,
-                        },
-                    })
+                if (isConnected && userProfile) {
+                    // If we have a user profile in the wallet context, use it
+                    setError(null)
+                } else if (isConnected) {
+                    // If connected but no profile, try to refresh
+                    await refreshProfile()
                 }
                 setError(null)
             } catch (err) {
-                console.error("Error fetching profile:", err)
+                console.error("Error loading profile:", err)
                 setError("Failed to load profile data")
                 toast({
                     variant: "destructive",
@@ -102,11 +51,11 @@ export default function ProfilePage() {
             }
         }
 
-        fetchProfile()
-    }, [isConnected, walletAddress, user])
+        loadProfile()
+    }, [isConnected, walletAddress, userProfile, refreshProfile])
 
     // Check if the profile belongs to the connected wallet
-    const isOwner = isConnected && walletAddress.toLowerCase() === (profile?.walletAddress || "").toLowerCase()
+    const isOwner = isConnected && walletAddress.toLowerCase() === (userProfile?.walletAddress || "").toLowerCase()
 
     if (isLoading) {
         return (
@@ -131,9 +80,24 @@ export default function ProfilePage() {
                         <div className="bg-zinc-900/50 backdrop-blur-md border border-zinc-800 rounded-xl p-8 max-w-md">
                             <h2 className="text-2xl font-bold text-red-400 mb-4">Error Loading Profile</h2>
                             <p className="text-zinc-300 mb-6">{error}</p>
-                            <Button onClick={() => window.location.reload()} className="bg-violet-600 hover:bg-violet-700">
+                            <Button onClick={() => refreshProfile()} className="bg-violet-600 hover:bg-violet-700">
                                 Try Again
                             </Button>
+                        </div>
+                    </div>
+                </CreativeGradientBackground>
+            </MainLayout>
+        )
+    }
+
+    if (!isConnected) {
+        return (
+            <MainLayout>
+                <CreativeGradientBackground variant="profile">
+                    <div className="min-h-screen flex items-center justify-center">
+                        <div className="bg-zinc-900/50 backdrop-blur-md border border-zinc-800 rounded-xl p-8 max-w-md">
+                            <h2 className="text-2xl font-bold text-violet-400 mb-4">Connect Your Wallet</h2>
+                            <p className="text-zinc-300 mb-6">Please connect your wallet to view your profile.</p>
                         </div>
                     </div>
                 </CreativeGradientBackground>
@@ -147,7 +111,7 @@ export default function ProfilePage() {
                 <div className="min-h-screen pb-16">
                     <div className="container px-4 md:px-6 py-8 max-w-6xl mx-auto">
                         {/* Profile Header */}
-                        <ProfileHeader profile={profile} isOwner={isOwner} isEditing={isEditing} setIsEditing={setIsEditing} />
+                        <ProfileHeader profile={userProfile} isOwner={isOwner} isEditing={isEditing} setIsEditing={setIsEditing} />
 
                         {/* Main Content */}
                         <div className="mt-8">
@@ -194,24 +158,24 @@ export default function ProfilePage() {
 
                                 <TabsContent value="music" className="space-y-8">
                                     {/* Riff Gallery */}
-                                    <RiffGallery isOwner={isOwner} isEditing={isEditing} userId={profile?.id} />
+                                    <RiffGallery isOwner={isOwner} isEditing={isEditing} userId={userProfile?.id} />
 
                                     {/* Favorites / Tips Given */}
-                                    <FavoriteRiffs isOwner={isOwner} userId={profile?.id} />
+                                    <FavoriteRiffs isOwner={isOwner} userId={userProfile?.id} />
                                 </TabsContent>
 
                                 <TabsContent value="community" className="space-y-8">
                                     {/* Activity Feed */}
-                                    <ActivityFeed userId={profile?.id} />
+                                    <ActivityFeed userId={userProfile?.id} />
 
                                     {/* Backstage Access (Tipping Tiers) */}
-                                    <TippingTiers isOwner={isOwner} isEditing={isEditing} userId={profile?.id} />
+                                    <TippingTiers isOwner={isOwner} isEditing={isEditing} userId={userProfile?.id} />
                                 </TabsContent>
 
                                 {isOwner && (
                                     <TabsContent value="settings" className="space-y-8">
                                         {/* Rifflords Staking Settings */}
-                                        <StakingSettings userId={profile?.id} />
+                                        <StakingSettings userId={userProfile?.id} />
                                     </TabsContent>
                                 )}
                             </Tabs>

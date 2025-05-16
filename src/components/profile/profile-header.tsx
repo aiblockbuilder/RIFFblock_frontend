@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Copy, Twitter, Instagram, Globe, MapPin, Camera, Loader2 } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
-import { useApi } from "@/contexts/api-context"
+import apiService from "@/services/api"
+import { useWallet } from "@/contexts/wallet-context"
 
 interface ProfileHeaderProps {
     profile: any
@@ -17,33 +18,67 @@ interface ProfileHeaderProps {
 }
 
 export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditing }: ProfileHeaderProps) {
-    const [name, setName] = useState(profile.name)
-    const [bio, setBio] = useState(profile.bio)
-    const [location, setLocation] = useState(profile.location)
-    const [twitter, setTwitter] = useState(profile.socialLinks?.twitter || "")
-    const [instagram, setInstagram] = useState(profile.socialLinks?.instagram || "")
-    const [website, setWebsite] = useState(profile.socialLinks?.website || "")
+    const { refreshProfile } = useWallet()
+    const [name, setName] = useState(profile?.name || "")
+    const [bio, setBio] = useState(profile?.bio || "")
+    const [location, setLocation] = useState(profile?.location || "")
+    const [twitter, setTwitter] = useState(profile?.socialLinks?.twitter || "")
+    const [instagram, setInstagram] = useState(profile?.socialLinks?.instagram || "")
+    const [website, setWebsite] = useState(profile?.socialLinks?.website || "")
     const [isSubmitting, setIsSubmitting] = useState(false)
-    const { user } = useApi()
+    const [avatarFile, setAvatarFile] = useState<File | null>(null)
+    const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
+    const [coverFile, setCoverFile] = useState<File | null>(null)
+    const [coverPreview, setCoverPreview] = useState<string | null>(null)
 
     // Update state when profile changes
     useEffect(() => {
         if (profile) {
-            setName(profile.name)
-            setBio(profile.bio)
-            setLocation(profile.location)
+            setName(profile.name || "")
+            setBio(profile.bio || "")
+            setLocation(profile.location || "")
             setTwitter(profile.socialLinks?.twitter || "")
             setInstagram(profile.socialLinks?.instagram || "")
             setWebsite(profile.socialLinks?.website || "")
+            setAvatarPreview(null)
+            setCoverPreview(null)
         }
     }, [profile])
 
     const copyWalletAddress = () => {
-        navigator.clipboard.writeText(profile.ensName || profile.walletAddress || "0x1234...5678")
+        navigator.clipboard.writeText(profile?.ensName || profile?.walletAddress || "0x1234...5678")
         toast({
             title: "Address Copied",
             description: "Wallet address copied to clipboard.",
         })
+    }
+
+    const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0]
+            setAvatarFile(file)
+
+            // Create preview
+            const reader = new FileReader()
+            reader.onloadend = () => {
+                setAvatarPreview(reader.result as string)
+            }
+            reader.readAsDataURL(file)
+        }
+    }
+
+    const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0]
+            setCoverFile(file)
+
+            // Create preview
+            const reader = new FileReader()
+            reader.onloadend = () => {
+                setCoverPreview(reader.result as string)
+            }
+            reader.readAsDataURL(file)
+        }
     }
 
     const handleSaveProfile = async () => {
@@ -52,16 +87,34 @@ export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditin
         setIsSubmitting(true)
 
         try {
-            await user.updateProfile({
-                name,
-                bio,
-                location,
-                socialLinks: {
-                    twitter,
-                    instagram,
-                    website,
-                },
-            })
+            // Prepare form data for file uploads
+            const formData = new FormData()
+            formData.append("name", name)
+            formData.append("bio", bio || "")
+            formData.append("location", location || "")
+
+            // Add social links
+            const socialLinks = {
+                twitter,
+                instagram,
+                website,
+            }
+            formData.append("socialLinks", JSON.stringify(socialLinks))
+
+            // Add files if selected
+            if (avatarFile) {
+                formData.append("avatar", avatarFile)
+            }
+
+            if (coverFile) {
+                formData.append("cover", coverFile)
+            }
+
+            // Update profile
+            await apiService.updateProfile(formData)
+
+            // Refresh profile data
+            await refreshProfile()
 
             setIsEditing(false)
             toast({
@@ -84,13 +137,26 @@ export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditin
         <div className="relative">
             {/* Cover Image */}
             <div className="relative h-48 md:h-64 w-full rounded-xl overflow-hidden">
-                <Image src={profile.coverImage || "/profile_avatar.jpg"} alt="Cover" fill className="object-cover" priority />
+                <Image
+                    src={
+                        coverPreview ||
+                        profile?.coverImage ||
+                        "/placeholder.svg?height=400&width=1200&query=abstract%20digital%20background"
+                    }
+                    alt="Cover"
+                    fill
+                    className="object-cover"
+                    priority
+                />
                 {isEditing && (
                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                        <Button variant="outline" className="bg-black/50 border-white/20">
-                            <Camera className="mr-2 h-4 w-4" />
-                            Change Cover
-                        </Button>
+                        <label htmlFor="cover-upload" className="cursor-pointer">
+                            <Button variant="outline" className="bg-black/50 border-white/20">
+                                <Camera className="mr-2 h-4 w-4" />
+                                Change Cover
+                            </Button>
+                            <input id="cover-upload" type="file" accept="image/*" className="hidden" onChange={handleCoverChange} />
+                        </label>
                     </div>
                 )}
             </div>
@@ -100,13 +166,27 @@ export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditin
                 <div className="flex flex-col md:flex-row gap-6">
                     {/* Avatar */}
                     <div className="relative w-32 h-32 md:w-40 md:h-40 rounded-xl overflow-hidden border-4 border-[#0d0d0d] bg-zinc-900">
-                        <Image src={profile.avatar || "/neon-profile.png"} alt={profile.name} fill className="object-cover" />
+                        <Image
+                            src={avatarPreview || profile?.avatar || "/placeholder.svg?height=200&width=200&query=profile%20avatar"}
+                            alt={profile?.name || "User"}
+                            fill
+                            className="object-cover"
+                        />
                         {isEditing && (
                             <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                <Button variant="outline" size="sm" className="bg-black/50 border-white/20">
-                                    <Camera className="mr-2 h-4 w-4" />
-                                    Change
-                                </Button>
+                                <label htmlFor="avatar-upload" className="cursor-pointer">
+                                    <Button variant="outline" size="sm" className="bg-black/50 border-white/20">
+                                        <Camera className="mr-2 h-4 w-4" />
+                                        Change
+                                    </Button>
+                                    <input
+                                        id="avatar-upload"
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={handleAvatarChange}
+                                    />
+                                </label>
                             </div>
                         )}
                     </div>
@@ -123,7 +203,7 @@ export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditin
                                         placeholder="Artist Name"
                                     />
                                 ) : (
-                                    <h1 className="text-3xl md:text-4xl font-bold">{profile.name}</h1>
+                                    <h1 className="text-3xl md:text-4xl font-bold">{profile?.name || "Anonymous Artist"}</h1>
                                 )}
 
                                 <div className="flex items-center gap-2 text-zinc-400 mt-1">
@@ -138,7 +218,7 @@ export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditin
                                             />
                                         </div>
                                     ) : (
-                                        profile.location && (
+                                        profile?.location && (
                                             <div className="flex items-center gap-1">
                                                 <MapPin className="h-4 w-4" />
                                                 <span>{profile.location}</span>
@@ -147,7 +227,7 @@ export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditin
                                     )}
 
                                     <div className="flex items-center gap-1 bg-zinc-900/80 px-2 py-1 rounded-full text-xs">
-                                        <span>{profile.ensName || profile.walletAddress || "0x1234...5678"}</span>
+                                        <span>{profile?.ensName || profile?.walletAddress || "0x1234...5678"}</span>
                                         <button onClick={() => copyWalletAddress()} className="text-zinc-500 hover:text-zinc-300">
                                             <Copy className="h-3 w-3" />
                                         </button>
@@ -158,18 +238,18 @@ export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditin
                             {/* Stats */}
                             <div className="flex mt-4 gap-4 md:gap-6">
                                 <div className="text-center">
-                                    <div className="text-2xl font-bold text-violet-400">{profile.stats?.totalRiffs || 0}</div>
+                                    <div className="text-2xl font-bold text-violet-400">{profile?.stats?.totalRiffs || 0}</div>
                                     <div className="text-xs text-zinc-500">Riffs</div>
                                 </div>
                                 <div className="text-center">
                                     <div className="text-2xl font-bold text-violet-400">
-                                        {(profile.stats?.followers || 0).toLocaleString()}
+                                        {(profile?.stats?.followers || 0).toLocaleString()}
                                     </div>
                                     <div className="text-xs text-zinc-500">Followers</div>
                                 </div>
                                 <div className="text-center">
                                     <div className="text-2xl font-bold text-violet-400">
-                                        {(profile.stats?.totalTips || 0).toLocaleString()}
+                                        {(profile?.stats?.totalTips || 0).toLocaleString()}
                                     </div>
                                     <div className="text-xs text-zinc-500">RIFF Tips</div>
                                 </div>
@@ -187,12 +267,12 @@ export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditin
                                     rows={3}
                                 />
                             ) : (
-                                <p className="text-zinc-300 text-sm md:text-base">{profile.bio}</p>
+                                <p className="text-zinc-300 text-sm md:text-base">{profile?.bio || "No bio provided yet."}</p>
                             )}
                         </div>
 
                         {/* Genres & Influences */}
-                        {!isEditing && (
+                        {!isEditing && profile?.genres && (
                             <div className="mt-4 flex flex-wrap gap-2">
                                 {profile.genres?.map((genre: string) => (
                                     <span key={genre} className="px-2 py-1 bg-violet-500/20 text-violet-300 rounded-full text-xs">
@@ -241,7 +321,7 @@ export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditin
                                 </div>
                             ) : (
                                 <>
-                                    {profile.socialLinks?.twitter && (
+                                    {profile?.socialLinks?.twitter && (
                                         <a
                                             href={profile.socialLinks.twitter}
                                             target="_blank"
@@ -251,7 +331,7 @@ export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditin
                                             <Twitter className="h-5 w-5 text-[#1DA1F2]" />
                                         </a>
                                     )}
-                                    {profile.socialLinks?.instagram && (
+                                    {profile?.socialLinks?.instagram && (
                                         <a
                                             href={profile.socialLinks.instagram}
                                             target="_blank"
@@ -261,7 +341,7 @@ export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditin
                                             <Instagram className="h-5 w-5 text-[#E1306C]" />
                                         </a>
                                     )}
-                                    {profile.socialLinks?.website && (
+                                    {profile?.socialLinks?.website && (
                                         <a
                                             href={profile.socialLinks.website}
                                             target="_blank"
@@ -305,6 +385,6 @@ export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditin
                     </div>
                 </div>
             </div>
-        </div>
+        </div >
     )
 }

@@ -37,7 +37,7 @@ import MainLayout from "@/components/layouts/main-layout"
 import VerticalLineWaveform from "@/components/vertical-line-waveform"
 import StringLights from "@/components/string-lights"
 import { useToast } from "@/hooks/use-toast"
-import { riffApi, userApi } from "@/services/api"
+import apiService from "@/services/api"
 
 // Import fallback mock data for initial rendering and error states
 import { featuredArtists as mockFeaturedArtists, genres, moods, instruments } from "@/data/market-data"
@@ -111,7 +111,7 @@ export default function MarketPage() {
             setIsLoading(true)
             setError(null)
             try {
-                const response = await riffApi.getAllRiffs({
+                const response = await apiService.getRiffs({
                     genre: selectedGenre !== "All" ? selectedGenre : undefined,
                     mood: selectedMood !== "All" ? selectedMood : undefined,
                     instrument: selectedInstrument !== "All" ? selectedInstrument : undefined,
@@ -182,7 +182,7 @@ export default function MarketPage() {
     useEffect(() => {
         const fetchFeaturedArtists = async () => {
             try {
-                const response = await userApi.getFeaturedArtists()
+                const response = await apiService.getFeaturedArtists()
 
                 if (response.data && response.data.length > 0) {
                     // Transform API response to match our Artist interface
@@ -1493,6 +1493,16 @@ interface AlbumCardProps {
 }
 
 function AlbumCard({ riff, isPlaying, onPlay, onClick, onFlip, isBargain = false }: AlbumCardProps) {
+    // Handle like/unlike
+    const handleLike = async (e: React.MouseEvent) => {
+        e.stopPropagation()
+        try {
+            await apiService.likeRiff(riff.id.toString())
+            // You would typically update the UI here
+        } catch (err) {
+            console.error("Error liking riff:", err)
+        }
+    }
     return (
         <motion.div
             className="group relative w-[160px] cursor-pointer"
@@ -1534,6 +1544,16 @@ function AlbumCard({ riff, isPlaying, onPlay, onClick, onFlip, isBargain = false
                     style={{ transformOrigin: "center" }}
                 >
                     {isPlaying ? <Pause size={20} className="text-white" /> : <Play size={20} className="text-white" />}
+                </motion.button>
+
+                {/* Like button */}
+                <motion.button
+                    className="absolute top-2 left-2 bg-black/50 p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-40"
+                    onClick={handleLike}
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                >
+                    <Heart size={14} className="text-white" />
                 </motion.button>
 
                 {/* Badges */}

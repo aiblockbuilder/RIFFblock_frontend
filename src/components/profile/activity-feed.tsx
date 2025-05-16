@@ -4,8 +4,8 @@ import { useState, useEffect } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Coins, Music, Heart, ArrowUpRight, MessageSquare, RefreshCw, Loader2, AlertCircle } from "lucide-react"
-import { userApi } from "@/services/api"
 import { useToast } from "@/hooks/use-toast"
+import apiService from "@/services/api"
 
 interface Activity {
     id: string
@@ -31,7 +31,7 @@ export default function ActivityFeed({ userId }: { userId?: string }) {
         setIsLoading(true)
         setError(null)
         try {
-            const response = await userApi.getUserActivity(userId)
+            const response = await apiService.getUserActivity(userId)
 
             // Transform API response to match our Activity interface
             const transformedActivities = response.data.map((activity: any) => ({
@@ -62,7 +62,7 @@ export default function ActivityFeed({ userId }: { userId?: string }) {
                     type: "upload",
                     title: "Uploaded a new riff",
                     riffTitle: "Neon Cascade",
-                    riffImage: "/synthwave-album-cover-1.jpg",
+                    riffImage: "/synthwave-album-cover-1.png",
                     timestamp: "2 hours ago",
                 },
                 {
@@ -70,7 +70,7 @@ export default function ActivityFeed({ userId }: { userId?: string }) {
                     type: "tip",
                     title: "Received 150 RIFF tip",
                     from: "CyberDreamer",
-                    fromImage: "/placeholder.svg?height=100&width=100&query=cyberpunk+profile",
+                    fromImage: "/placeholder-ynk6p.png",
                     riffTitle: "Midnight Drive",
                     timestamp: "1 day ago",
                 },
@@ -80,7 +80,7 @@ export default function ActivityFeed({ userId }: { userId?: string }) {
                     title: "Liked a riff",
                     riffTitle: "Quantum Pulse",
                     artist: "CyberSoul",
-                    artistImage: "/placeholder.svg?height=100&width=100&query=futuristic+profile",
+                    artistImage: "/placeholder-38ei2.png",
                     timestamp: "2 days ago",
                 },
                 {
@@ -97,7 +97,7 @@ export default function ActivityFeed({ userId }: { userId?: string }) {
                     title: "Staked 500 RIFF on",
                     riffTitle: "Analog Sunset",
                     artist: "RetroWave",
-                    artistImage: "/placeholder.svg?height=100&width=100&query=retro+profile",
+                    artistImage: "/placeholder-ynk6p.png",
                     timestamp: "5 days ago",
                 },
             ])
@@ -219,7 +219,6 @@ export default function ActivityFeed({ userId }: { userId?: string }) {
             )}
 
             {activities.length > 0 && (
-
                 <div className="space-y-4">
                     {activities.map((activity) => (
                         <div
@@ -244,7 +243,7 @@ export default function ActivityFeed({ userId }: { userId?: string }) {
                                                 <div className="flex items-center gap-1">
                                                     <div className="relative w-4 h-4 rounded-full overflow-hidden">
                                                         <Image
-                                                            src={activity.artistImage || "/placeholder.svg"}
+                                                            src={activity.artistImage || "/placeholder-38ei2.png"}
                                                             alt={activity.artist}
                                                             width={16}
                                                             height={16}
@@ -263,7 +262,7 @@ export default function ActivityFeed({ userId }: { userId?: string }) {
                                         <div className="flex items-center gap-2 mt-2">
                                             <div className="relative w-6 h-6 rounded-full overflow-hidden">
                                                 <Image
-                                                    src={activity.fromImage || "/placeholder.svg"}
+                                                    src={activity.fromImage || "/placeholder-ynk6p.png"}
                                                     alt={activity.from}
                                                     width={24}
                                                     height={24}
@@ -289,7 +288,7 @@ export default function ActivityFeed({ userId }: { userId?: string }) {
                                 {activity.riffImage && (
                                     <div className="relative w-12 h-12 rounded-md overflow-hidden flex-shrink-0">
                                         <Image
-                                            src={activity.riffImage || "/placeholder.svg"}
+                                            src={activity.riffImage || "/placeholder-38ei2.png"}
                                             alt={activity.riffTitle || ""}
                                             width={48}
                                             height={48}

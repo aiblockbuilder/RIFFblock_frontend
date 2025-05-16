@@ -1,56 +1,149 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
-import { Play, Pause, Heart, Share2, MoreHorizontal } from "lucide-react"
+import { Play, Pause, Heart, Share2, MoreHorizontal, Loader2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { useApi } from "@/contexts/api-context"
+import { toast } from "@/components/ui/use-toast"
 
 interface FavoriteRiffsProps {
     isOwner: boolean
+    userId: string
 }
 
-export default function FavoriteRiffs({ isOwner }: FavoriteRiffsProps) {
+export default function FavoriteRiffs({ isOwner, userId }: FavoriteRiffsProps) {
     const [playingRiff, setPlayingRiff] = useState<string | null>(null)
 
-    // Mock data for favorite riffs
-    const favoriteRiffs = [
-        {
-            id: "fav-1",
-            title: "Quantum Pulse",
-            artist: "CyberSoul",
-            image: "/favorite-ablbum-cover-1.jpg",
-            duration: "0:35",
-        },
-        {
-            id: "fav-2",
-            title: "Neon Streets",
-            artist: "RetroWave",
-            image: "/favorite-ablbum-cover-2.jpg",
-            duration: "0:42",
-        },
-        {
-            id: "fav-3",
-            title: "Digital Horizon",
-            artist: "SynthMaster",
-            image: "/favorite-ablbum-cover-3.jpg",
-            duration: "0:29",
-        },
-        {
-            id: "fav-4",
-            title: "Cyber Dreams",
-            artist: "NightDrive",
-            image: "/favorite-ablbum-cover-4.jpg",
-            duration: "0:38",
-        },
-    ]
+    const [favoriteRiffs, setFavoriteRiffs] = useState<any[]>([])
+    const [isLoading, setIsLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+    const { apiService } = useApi()
 
-    const togglePlay = (id: string) => {
-        if (playingRiff === id) {
-            setPlayingRiff(null)
-        } else {
-            setPlayingRiff(id)
+    const togglePlay = (riffId: string) => {
+        setPlayingRiff((prev) => (prev === riffId ? null : riffId))
+    }
+
+    useEffect(() => {
+        const fetchFavoriteRiffs = async () => {
+            try {
+                setIsLoading(true)
+                // In a real implementation, we would fetch favorite riffs from the API
+                // const response = await apiService.getUserFavorites(userId)
+                // setFavoriteRiffs(response.data)
+
+                // Mock data for now
+                setFavoriteRiffs([
+                    {
+                        id: "fav-1",
+                        title: "Quantum Pulse",
+                        artist: "CyberSoul",
+                        image: "/favorite-ablbum-cover-1.jpg",
+                        duration: "0:35",
+                    },
+                    {
+                        id: "fav-2",
+                        title: "Neon Streets",
+                        artist: "RetroWave",
+                        image: "/favorite-ablbum-cover-2.jpg",
+                        duration: "0:42",
+                    },
+                    {
+                        id: "fav-3",
+                        title: "Digital Horizon",
+                        artist: "SynthMaster",
+                        image: "/favorite-ablbum-cover-3.jpg",
+                        duration: "0:29",
+                    },
+                    {
+                        id: "fav-4",
+                        title: "Cyber Dreams",
+                        artist: "NightDrive",
+                        image: "/favorite-ablbum-cover-4.jpg",
+                        duration: "0:38",
+                    },
+                ])
+                setError(null)
+            } catch (err) {
+                console.error("Error fetching favorite riffs:", err)
+                setError("Failed to load favorite riffs")
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "Failed to load favorite riffs. Please try again.",
+                })
+            } finally {
+                setIsLoading(false)
+            }
         }
+
+        fetchFavoriteRiffs()
+    }, [userId, apiService])
+
+    const handleUnlike = async (riffId: string) => {
+        try {
+            await apiService.unlikeRiff(riffId)
+            setFavoriteRiffs(favoriteRiffs.filter((riff) => riff.id !== riffId))
+            toast({
+                title: "Riff Unliked",
+                description: "Riff has been removed from your favorites.",
+            })
+        } catch (error) {
+            console.error("Error unliking riff:", error)
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Failed to unlike riff. Please try again.",
+            })
+        }
+    }
+
+    if (isLoading) {
+        return (
+            <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                    <h2 className="text-2xl font-bold">{isOwner ? "My Favorites" : "Favorites"}</h2>
+                </div>
+                <div className="flex justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-violet-500" />
+                </div>
+            </div>
+        )
+    }
+
+    if (error) {
+        return (
+            <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                    <h2 className="text-2xl font-bold">{isOwner ? "My Favorites" : "Favorites"}</h2>
+                </div>
+                <div className="bg-zinc-900/50 backdrop-blur-sm border border-zinc-800 rounded-lg p-6 text-center">
+                    <p className="text-zinc-400">{error}</p>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-4 border-zinc-700 text-zinc-400 hover:text-zinc-300"
+                        onClick={() => window.location.reload()}
+                    >
+                        Try Again
+                    </Button>
+                </div>
+            </div>
+        )
+    }
+
+    if (favoriteRiffs.length === 0) {
+        return (
+            <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                    <h2 className="text-2xl font-bold">{isOwner ? "My Favorites" : "Favorites"}</h2>
+                </div>
+                <div className="bg-zinc-900/50 backdrop-blur-sm border border-zinc-800 rounded-lg p-6 text-center">
+                    <p className="text-zinc-400">No favorite riffs found.</p>
+                </div>
+            </div>
+        )
     }
 
     return (
@@ -95,7 +188,7 @@ export default function FavoriteRiffs({ isOwner }: FavoriteRiffsProps) {
                                         </button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent className="bg-zinc-900 border-zinc-800">
-                                        <DropdownMenuItem className="cursor-pointer">
+                                        <DropdownMenuItem className="cursor-pointer" onClick={() => handleUnlike(riff.id)}>
                                             <Heart className="mr-2 h-4 w-4" />
                                             <span>Unlike</span>
                                         </DropdownMenuItem>

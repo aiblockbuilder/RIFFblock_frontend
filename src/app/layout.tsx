@@ -22,12 +22,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <ApiProvider>
-          <WalletProvider>
+        <WalletProvider>
+          <ApiProvider>
             {children}
             <Toaster />
-          </WalletProvider>
-        </ApiProvider>
+          </ApiProvider>
+        </WalletProvider>
       </body>
     </html>
   )

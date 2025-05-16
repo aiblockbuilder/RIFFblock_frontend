@@ -12,8 +12,8 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useApi } from "@/contexts/api-context"
-import { toast } from "@/components/ui/use-toast"
+import { useToast } from "@/components/ui/use-toast"
+import apiService from "@/services/api"
 
 interface RiffGalleryProps {
     isOwner: boolean
@@ -29,7 +29,7 @@ export default function RiffGallery({ isOwner, isEditing, userId }: RiffGalleryP
     const [riffs, setRiffs] = useState<any[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const { riff: riffApi } = useApi()
+    const { toast } = useToast()
 
     // Fetch riffs
     useEffect(() => {
@@ -40,7 +40,7 @@ export default function RiffGallery({ isOwner, isEditing, userId }: RiffGalleryP
                 let data
                 if (userId) {
                     // Fetch user's riffs from API
-                    const response = await riffApi.getAllRiffs({ userId })
+                    const response = await apiService.getRiffs({ userId })
                     data = response.data
                 }
 
@@ -127,7 +127,7 @@ export default function RiffGallery({ isOwner, isEditing, userId }: RiffGalleryP
         }
 
         fetchRiffs()
-    }, [userId, riffApi])
+    }, [userId, toast])
 
     // Sort riffs based on sortBy value
     const sortedRiffs = [...riffs].sort((a, b) => {
@@ -149,6 +149,25 @@ export default function RiffGallery({ isOwner, isEditing, userId }: RiffGalleryP
             setPlayingRiff(null)
         } else {
             setPlayingRiff(id)
+        }
+    }
+
+    // Handle like/unlike
+    const handleLike = async (id: string, e: React.MouseEvent) => {
+        e.stopPropagation()
+        try {
+            await apiService.likeRiff(id)
+            toast({
+                title: "Success",
+                description: "Riff liked successfully!",
+            })
+        } catch (err) {
+            console.error("Error liking riff:", err)
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Failed to like riff. Please try again.",
+            })
         }
     }
 
@@ -266,7 +285,7 @@ export default function RiffGallery({ isOwner, isEditing, userId }: RiffGalleryP
                                             </button>
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent className="bg-zinc-900 border-zinc-800">
-                                            <DropdownMenuItem className="cursor-pointer">
+                                            <DropdownMenuItem className="cursor-pointer" onClick={(e) => handleLike(riff.id, e)}>
                                                 <Heart className="mr-2 h-4 w-4" />
                                                 <span>Like</span>
                                             </DropdownMenuItem>
@@ -320,7 +339,13 @@ export default function RiffGallery({ isOwner, isEditing, userId }: RiffGalleryP
                                 >
                                     {playingRiff === riff.id ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
                                 </button>
-                                <button className="p-1.5 text-zinc-400 hover:text-zinc-300">
+                                <button
+                                    className="p-1.5 text-zinc-400 hover:text-zinc-300"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleLike(riff.id, e)
+                                    }}
+                                >
                                     <Heart className="h-4 w-4" />
                                 </button>
                                 <DropdownMenu>

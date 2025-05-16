@@ -69,7 +69,7 @@ export default function FlowingBackground({ intensity = 1, speed = 1 }: FlowingB
     ]
 
     // Create flowing shapes
-    const shapes = []
+    const shapes: { x: number; y: number; size: number; speed: number; opacity: number; hue: number }[] = []
     const shapeCount = 15
 
     for (let i = 0; i < shapeCount; i++) {

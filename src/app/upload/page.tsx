@@ -37,6 +37,7 @@ import MainLayout from "@/components/layouts/main-layout"
 import WaveformVisualizer from "@/components/upload/waveform-visualizer"
 import WalletConnect from "@/components/wallet-connect"
 import CreativeGradientBackground from "@/components/creative-gradient-background"
+import apiService from "@/services/api"
 
 // Define the steps in the upload process
 const STEPS = {
@@ -50,7 +51,6 @@ const STEPS = {
 export default function UploadPage() {
     const router = useRouter()
     const { isConnected } = useWallet()
-    const { riff: riffApi, nft: nftApi } = useApi()
     const [currentStep, setCurrentStep] = useState(STEPS.FILE_UPLOAD)
     const [isUploading, setIsUploading] = useState(false)
     const [isMinting, setIsMinting] = useState(false)
@@ -108,17 +108,16 @@ export default function UploadPage() {
             try {
                 setIsLoadingCollections(true)
                 // In a real implementation, we would fetch collections from the API
-                // const response = await userApi.getUserCollections()
-                // setCollections(response.data)
-
-                // Mock collections for now
+                const response = await apiService.getUserCollections()
+                setCollections(response.data || [])
+            } catch (error) {
+                console.error("Error fetching collections:", error)
+                // Mock collections for fallback
                 setCollections([
                     { id: "collection-1", name: "Synthwave Sessions" },
                     { id: "collection-2", name: "Guitar Experiments" },
                     { id: "collection-3", name: "Ambient Textures" },
                 ])
-            } catch (error) {
-                console.error("Error fetching collections:", error)
             } finally {
                 setIsLoadingCollections(false)
             }
@@ -423,7 +422,7 @@ export default function UploadPage() {
                 }
 
                 // Upload riff
-                await riffApi.uploadRiff(formData)
+                await apiService.uploadRiff(formData)
                 toast({
                     title: "Upload Successful",
                     description: "Your riff has been uploaded successfully!",
@@ -456,11 +455,11 @@ export default function UploadPage() {
                 }
 
                 // Upload riff first
-                const riffResponse = await riffApi.uploadRiff(formData)
+                const riffResponse = await apiService.uploadRiff(formData)
                 const riffId = riffResponse.data.id
 
                 // Then mint as NFT
-                await nftApi.mintNFT({
+                await apiService.mintNFT({
                     riffId,
                     price: Number.parseFloat(price),
                     currency,

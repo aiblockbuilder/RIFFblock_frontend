@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import Image from "next/image"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Play, Pause, Rewind, FastForward } from "lucide-react"
+import { ArrowRight, Play, Pause } from "lucide-react"
 import WalletConnect from "@/components/wallet-connect"
 
 interface Artist {
@@ -74,22 +74,6 @@ export default function StudioHero() {
     const mins = Math.floor(seconds / 60)
     const secs = Math.floor(seconds % 60)
     return `${mins}:${secs.toString().padStart(2, "0")}`
-  }
-
-  // Skip forward by 10 seconds
-  const handleSkipForward = () => {
-    setCurrentTime((prev) => {
-      const newTime = Math.min(prev + 10, 30) // 30 seconds is the max duration
-      return newTime
-    })
-  }
-
-  // Skip backward by 10 seconds
-  const handleSkipBackward = () => {
-    setCurrentTime((prev) => {
-      const newTime = Math.max(prev - 10, 0) // 0 seconds is the min duration
-      return newTime
-    })
   }
 
   return (
@@ -262,17 +246,8 @@ export default function StudioHero() {
           {/* Mixing console visualization */}
           <div className="mt-8 w-full max-w-5xl">
             <div className="relative h-16 bg-zinc-900/70 backdrop-blur-md rounded-lg border border-zinc-800/50 overflow-hidden">
-              {/* Media controls */}
-              <div className="absolute left-4 top-1/2 transform -translate-y-1/2 z-10 flex items-center gap-2">
-                {/* Skip backward button */}
-                <button
-                  className="w-8 h-8 rounded-full bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center transition-colors"
-                  onClick={handleSkipBackward}
-                  aria-label="Skip backward 10 seconds"
-                >
-                  <Rewind size={14} />
-                </button>
-                {/* Play/Pause button */}
+              {/* Play/Pause button */}
+              <div className="absolute left-4 top-1/2 transform -translate-y-1/2 z-10">
                 <button
                   className="w-10 h-10 rounded-full bg-gradient-to-r from-violet-600 to-blue-500 hover:from-violet-700 hover:to-blue-600 flex items-center justify-center transition-colors shadow-lg shadow-violet-900/30"
                   onClick={() => setIsPlaying(!isPlaying)}
@@ -280,16 +255,7 @@ export default function StudioHero() {
                 >
                   {isPlaying ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}
                 </button>
-                {/* Skip forward button */}
-                <button
-                  className="w-8 h-8 rounded-full bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center transition-colors"
-                  onClick={handleSkipForward}
-                  aria-label="Skip forward 10 seconds"
-                >
-                  <FastForward size={14} />
-                </button>
               </div>
-
               {/* Fader visualization */}
               <div className="absolute inset-0 flex items-center justify-center gap-2 px-4">
                 {[...Array(12)].map((_, i) => (
@@ -308,8 +274,8 @@ export default function StudioHero() {
               </div>
 
               {/* Progress bar */}
-              <div className="absolute bottom-2 left-36 right-4">
-                <div className="flex items-center justify-between text-xs text-zinc-400 mb-1 ml-8">
+              <div className="absolute bottom-2 left-16 right-4">
+                <div className="flex items-center justify-between text-xs text-zinc-400 mb-1">
                   <span>{formatTime(currentTime)}</span>
                   <span>2:30</span>
                 </div>
