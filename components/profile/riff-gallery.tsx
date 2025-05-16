@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Play, Pause, Heart, Share2, Plus, MoreHorizontal, Clock, Grid3x3, List, Loader2 } from "lucide-react"
+import { Play, Pause, Heart, Share2, Plus, MoreHorizontal, Clock, Grid3x3, List } from "lucide-react"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -12,137 +12,80 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useApi } from "@/contexts/api-context"
-import { toast } from "@/components/ui/use-toast"
 
 interface RiffGalleryProps {
     isOwner: boolean
     isEditing: boolean
-    userId?: string
 }
 
-export default function RiffGallery({ isOwner, isEditing, userId }: RiffGalleryProps) {
+export default function RiffGallery({ isOwner, isEditing }: RiffGalleryProps) {
     const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
     const [sortBy, setSortBy] = useState("newest")
     const [playingRiff, setPlayingRiff] = useState<string | null>(null)
 
-    const [riffs, setRiffs] = useState<any[]>([])
-    const [isLoading, setIsLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
-    const { riff: riffApi } = useApi()
-
-    // Fetch riffs
-    useEffect(() => {
-        const fetchRiffs = async () => {
-            try {
-                setIsLoading(true)
-
-                let data
-                if (userId) {
-                    // Fetch user's riffs from API
-                    const response = await riffApi.getAllRiffs({ userId })
-                    data = response.data
-                }
-
-                if (data && data.length > 0) {
-                    setRiffs(data)
-                } else {
-                    // Fallback to mock data
-                    setRiffs([
-                        {
-                            id: "riff-1",
-                            title: "Neon Cascade",
-                            image: "/synthwave-album-cover-1.jpg",
-                            duration: "0:32",
-                            date: "2023-12-15",
-                            plays: 1245,
-                            tips: 350,
-                            isNft: true,
-                        },
-                        {
-                            id: "riff-2",
-                            title: "Midnight Drive",
-                            image: "/synthwave-album-cover-2.jpg",
-                            duration: "0:45",
-                            date: "2023-11-28",
-                            plays: 987,
-                            tips: 210,
-                            isNft: true,
-                        },
-                        {
-                            id: "riff-3",
-                            title: "Cyber Dawn",
-                            image: "/synthwave-album-cover-3.jpg",
-                            duration: "0:38",
-                            date: "2023-10-05",
-                            plays: 2341,
-                            tips: 520,
-                            isNft: true,
-                        },
-                        {
-                            id: "riff-4",
-                            title: "Retro Pulse",
-                            image: "/synthwave-album-cover-4.jpg",
-                            duration: "0:29",
-                            date: "2023-09-17",
-                            plays: 1876,
-                            tips: 430,
-                            isNft: true,
-                        },
-                        {
-                            id: "riff-5",
-                            title: "Digital Dreams",
-                            image: "/synthwave-album-cover-2.jpg",
-                            duration: "0:41",
-                            date: "2023-08-22",
-                            plays: 1532,
-                            tips: 280,
-                            isNft: true,
-                        },
-                        {
-                            id: "riff-6",
-                            title: "Analog Sunset",
-                            image: "/synthwave-album-cover-4.jpg",
-                            duration: "0:36",
-                            date: "2023-07-30",
-                            plays: 1124,
-                            tips: 190,
-                            isNft: false,
-                        },
-                    ])
-                }
-
-                setError(null)
-            } catch (err) {
-                console.error("Error fetching riffs:", err)
-                setError("Failed to load riffs")
-                toast({
-                    variant: "destructive",
-                    title: "Error",
-                    description: "Failed to load riffs. Please try again.",
-                })
-            } finally {
-                setIsLoading(false)
-            }
-        }
-
-        fetchRiffs()
-    }, [userId, riffApi])
-
-    // Sort riffs based on sortBy value
-    const sortedRiffs = [...riffs].sort((a, b) => {
-        switch (sortBy) {
-            case "oldest":
-                return new Date(a.date).getTime() - new Date(b.date).getTime()
-            case "popular":
-                return b.plays - a.plays
-            case "tips":
-                return b.tips - a.tips
-            case "newest":
-            default:
-                return new Date(b.date).getTime() - new Date(a.date).getTime()
-        }
-    })
+    // Mock data for riffs
+    const riffs = [
+        {
+            id: "riff-1",
+            title: "Neon Cascade",
+            image: "/synthwave-album-cover-1.jpg",
+            duration: "0:32",
+            date: "2023-12-15",
+            plays: 1245,
+            tips: 350,
+            isNft: true,
+        },
+        {
+            id: "riff-2",
+            title: "Midnight Drive",
+            image: "/synthwave-album-cover-2.jpg",
+            duration: "0:45",
+            date: "2023-11-28",
+            plays: 987,
+            tips: 210,
+            isNft: true,
+        },
+        {
+            id: "riff-3",
+            title: "Cyber Dawn",
+            image: "/synthwave-album-cover-3.jpg",
+            duration: "0:38",
+            date: "2023-10-05",
+            plays: 2341,
+            tips: 520,
+            isNft: true,
+        },
+        {
+            id: "riff-4",
+            title: "Retro Pulse",
+            image: "/synthwave-album-cover-4.jpg",
+            duration: "0:29",
+            date: "2023-09-17",
+            plays: 1876,
+            tips: 430,
+            isNft: true,
+        },
+        {
+            id: "riff-5",
+            title: "Digital Dreams",
+            image: "/synthwave-album-cover-2.jpg",
+            duration: "0:41",
+            date: "2023-08-22",
+            plays: 1532,
+            tips: 280,
+            isNft: true,
+        },
+        {
+            id: "riff-6",
+            title: "Analog Sunset",
+            image: "/synthwave-album-cover-4.jpg",
+            duration: "0:36",
+            date: "2023-07-30",
+            plays: 1124,
+            tips: 190,
+            isNft: false,
+        },
+    ]
 
     const togglePlay = (id: string) => {
         if (playingRiff === id) {
@@ -150,44 +93,6 @@ export default function RiffGallery({ isOwner, isEditing, userId }: RiffGalleryP
         } else {
             setPlayingRiff(id)
         }
-    }
-
-    if (isLoading) {
-        return (
-            <div className="flex justify-center items-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-violet-500" />
-            </div>
-        )
-    }
-
-    if (error) {
-        return (
-            <div className="bg-zinc-900/50 backdrop-blur-md border border-zinc-800 rounded-xl p-6 text-center">
-                <p className="text-red-400 mb-4">{error}</p>
-                <Button
-                    onClick={() => window.location.reload()}
-                    variant="outline"
-                    className="border-zinc-700 text-zinc-400 hover:text-zinc-300"
-                >
-                    Try Again
-                </Button>
-            </div>
-        )
-    }
-
-    if (sortedRiffs.length === 0) {
-        return (
-            <div className="bg-zinc-900/50 backdrop-blur-md border border-zinc-800 rounded-xl p-8 text-center">
-                <h3 className="text-xl font-bold mb-2">No Riffs Found</h3>
-                <p className="text-zinc-400 mb-6">This artist hasn't uploaded any riffs yet.</p>
-                {isOwner && (
-                    <Button className="bg-violet-600 hover:bg-violet-700">
-                        <Plus className="mr-2 h-4 w-4" />
-                        Upload Your First Riff
-                    </Button>
-                )}
-            </div>
-        )
     }
 
     return (
@@ -231,7 +136,7 @@ export default function RiffGallery({ isOwner, isEditing, userId }: RiffGalleryP
 
             {viewMode === "grid" ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                    {sortedRiffs.map((riff) => (
+                    {riffs.map((riff) => (
                         <div
                             key={riff.id}
                             className="bg-zinc-900/50 backdrop-blur-sm border border-zinc-800 rounded-lg overflow-hidden hover:border-violet-500/30 transition-all group"
@@ -295,7 +200,7 @@ export default function RiffGallery({ isOwner, isEditing, userId }: RiffGalleryP
                 </div>
             ) : (
                 <div className="space-y-2">
-                    {sortedRiffs.map((riff) => (
+                    {riffs.map((riff) => (
                         <div
                             key={riff.id}
                             className="flex items-center gap-4 p-3 bg-zinc-900/50 backdrop-blur-sm border border-zinc-800 rounded-lg hover:border-violet-500/30 transition-all"
