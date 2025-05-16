@@ -359,7 +359,7 @@ export default function InvestPage() {
                                     document.getElementById("featured-riffs")?.scrollIntoView({ behavior: "smooth" })
                                 }}
                             >
-                                Explore Riffs to Back
+                                Explore Riffs to Support
                                 <ArrowRight className="ml-2 h-5 w-5" />
                             </Button>
                         </div>
