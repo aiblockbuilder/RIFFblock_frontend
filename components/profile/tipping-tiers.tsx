@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,13 +8,44 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Coins, Lock, Plus, Trash2, Edit, Save } from "lucide-react"
+import { userApi } from "@/lib/api-client"
+import { toast } from "@/components/ui/use-toast"
 
 interface TippingTiersProps {
     isOwner: boolean
     isEditing: boolean
+    walletAddress: string
 }
 
-export default function TippingTiers({ isOwner, isEditing }: TippingTiersProps) {
+export default function TippingTiers({ isOwner, isEditing, walletAddress }: TippingTiersProps) {
+    const [tippingTiers, setTippingTiers] = useState<any[]>([])
+    const [isLoading, setIsLoading] = useState(true)
+
+    useEffect(() => {
+        async function fetchTippingTiers() {
+            if (!walletAddress) {
+                setIsLoading(false)
+                return
+            }
+
+            try {
+                const response = await userApi.getUserTippingTiers(walletAddress)
+                setTippingTiers(response.data.tippingTiers || [])
+            } catch (error) {
+                console.error("Error fetching tipping tiers:", error)
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "Failed to load tipping tiers",
+                })
+            } finally {
+                setIsLoading(false)
+            }
+        }
+
+        fetchTippingTiers()
+    }, [walletAddress])
+
     const [tiers, setTiers] = useState([
         {
             id: "tier-1",
@@ -22,7 +53,7 @@ export default function TippingTiers({ isOwner, isEditing }: TippingTiersProps) 
             amount: 100,
             description: "Access to exclusive behind-the-scenes content and early previews of upcoming riffs.",
             perks: ["Exclusive updates", "Early access to new riffs"],
-            image: "/placeholder.svg?height=200&width=200&query=synthwave+badge+1",
+            image: "/placeholder-z2znj.png",
         },
         {
             id: "tier-2",
@@ -30,7 +61,7 @@ export default function TippingTiers({ isOwner, isEditing }: TippingTiersProps) 
             amount: 500,
             description: "All previous perks plus access to private livestreams and unreleased demo riffs.",
             perks: ["Private livestreams", "Unreleased demos", "Monthly Q&A"],
-            image: "/placeholder.svg?height=200&width=200&query=synthwave+badge+2",
+            image: "/synthwave-badge-2.png",
         },
         {
             id: "tier-3",
@@ -38,7 +69,7 @@ export default function TippingTiers({ isOwner, isEditing }: TippingTiersProps) 
             amount: 1000,
             description: "All previous perks plus personalized feedback on your own music and exclusive collaborations.",
             perks: ["Personalized feedback", "Exclusive collaborations", "Discord role"],
-            image: "/placeholder.svg?height=200&width=200&query=synthwave+badge+3",
+            image: "/synthwave-badge-03.png",
         },
     ])
 

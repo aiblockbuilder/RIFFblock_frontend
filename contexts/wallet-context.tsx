@@ -13,8 +13,10 @@ interface WalletContextType {
     walletAddress: string
     walletType: WalletType
     walletBalance: string
+    isAuthenticated: boolean
     connectWallet: (type?: WalletType) => Promise<void>
     disconnectWallet: () => void
+    signMessage: (message: string) => Promise<string | null>
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined)
@@ -22,13 +24,13 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined)
 export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [isConnecting, setIsConnecting] = useState(false)
     const [isConnected, setIsConnected] = useState(false)
+    const [isAuthenticated, setIsAuthenticated] = useState(false)
     const [walletAddress, setWalletAddress] = useState("")
     const [walletType, setWalletType] = useState<WalletType>(null)
     const [walletBalance, setWalletBalance] = useState("0.00")
     const [isMounted, setIsMounted] = useState(false)
 
     // Check if window is defined (browser) and ethereum is available
-    // @ts-expect-error: expect error
     const isEthereumAvailable = typeof window !== "undefined" && typeof window.ethereum !== "undefined"
 
     // Set mounted state for client-side rendering
@@ -40,7 +42,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     // Detect wallet type on load
     useEffect(() => {
         if (isEthereumAvailable) {
-            // @ts-expect-error: expect error
             if (window.ethereum.isMetaMask) {
                 setWalletType("metamask")
             }
@@ -52,7 +53,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const checkConnection = async () => {
             if (isEthereumAvailable) {
                 try {
-                    // @ts-expect-error: expect error
                     const accounts = await window.ethereum.request({ method: "eth_accounts" })
                     if (accounts && accounts.length > 0) {
                         handleAccountsChanged(accounts)
@@ -68,18 +68,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
             // Set up event listeners for account changes and disconnection
             if (isEthereumAvailable) {
-                // @ts-expect-error: expect error
                 window.ethereum.on("accountsChanged", handleAccountsChanged)
-                // @ts-expect-error: expect error
                 window.ethereum.on("disconnect", handleDisconnect)
             }
         }
 
         return () => {
             if (isEthereumAvailable) {
-                // @ts-expect-error: expect error
                 window.ethereum.removeListener("accountsChanged", handleAccountsChanged)
-                // @ts-expect-error: expect error
                 window.ethereum.removeListener("disconnect", handleDisconnect)
             }
         }
@@ -95,6 +91,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const address = accounts[0]
             setWalletAddress(address)
             setIsConnected(true)
+            setIsAuthenticated(true) // In wallet-based auth, connection = authentication
 
             // Mock balance for demo purposes
             const randomBalance = (Math.random() * 10).toFixed(4)
@@ -110,6 +107,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     // Handle disconnection
     const handleDisconnect = () => {
         setIsConnected(false)
+        setIsAuthenticated(false)
         setWalletAddress("")
         setWalletBalance("0.00")
     }
@@ -125,7 +123,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setWalletType(type)
 
         try {
-            // @ts-expect-error: expect error
             const accounts = await window.ethereum.request({ method: "eth_requestAccounts" })
             handleAccountsChanged(accounts)
         } catch (error) {
@@ -149,6 +146,34 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         })
     }
 
+    // Sign message with wallet
+    const signMessage = async (message: string): Promise<string | null> => {
+        if (!isConnected || !walletAddress) {
+            toast({
+                variant: "destructive",
+                title: "Wallet Not Connected",
+                description: "Please connect your wallet to sign messages.",
+            })
+            return null
+        }
+
+        try {
+            const signature = await window.ethereum.request({
+                method: "personal_sign",
+                params: [message, walletAddress],
+            })
+            return signature
+        } catch (error) {
+            console.error("Error signing message:", error)
+            toast({
+                variant: "destructive",
+                title: "Signing Failed",
+                description: "Failed to sign message with wallet.",
+            })
+            return null
+        }
+    }
+
     // Format address for display
     const formatAddress = (address: string) => {
         return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`
@@ -162,8 +187,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 walletAddress,
                 walletType,
                 walletBalance,
+                isAuthenticated,
                 connectWallet,
                 disconnectWallet,
+                signMessage,
             }}
         >
             {children}

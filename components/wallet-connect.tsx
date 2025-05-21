@@ -15,8 +15,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { toast } from "@/components/ui/use-toast"
-
 import { useWallet } from "@/contexts/wallet-context"
+import { useAuth } from "@/hooks/use-auth"
 
 interface WalletConnectProps {
   variant?: "default" | "outline"
@@ -35,7 +35,10 @@ const WalletConnect = ({
   onDisconnected,
   customConnectedButton,
 }: WalletConnectProps) => {
-  const { isConnecting, isConnected, walletAddress, walletType, walletBalance, connectWallet, disconnectWallet } = useWallet()
+  const { isConnecting, isConnected, walletAddress, walletType, walletBalance, connectWallet, disconnectWallet } =
+    useWallet()
+  const { authenticate, isAuthenticating } = useAuth()
+
   const [showWalletOptions, setShowWalletOptions] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
 
@@ -58,6 +61,13 @@ const WalletConnect = ({
       onDisconnected()
     }
   }, [isConnected, onDisconnected])
+
+  // Authenticate when wallet is connected
+  useEffect(() => {
+    if (isConnected && walletAddress) {
+      authenticate()
+    }
+  }, [isConnected, walletAddress, authenticate])
 
   // Format address for display
   const formatAddress = (address: string) => {
@@ -232,12 +242,12 @@ const WalletConnect = ({
           : "border-violet-500/50 text-violet-500 hover:bg-violet-500/10"
           } ${className}`}
         onClick={() => setShowWalletOptions(true)}
-        disabled={isConnecting}
+        disabled={isConnecting || isAuthenticating}
       >
-        {isConnecting ? (
+        {isConnecting || isAuthenticating ? (
           <div className="flex items-center gap-2">
             <div className="animate-spin rounded-full h-4 w-4 border-2 border-b-transparent border-white"></div>
-            <span>Connecting...</span>
+            <span>{isConnecting ? "Connecting..." : "Authenticating..."}</span>
           </div>
         ) : (
           <div className="flex items-center gap-2">

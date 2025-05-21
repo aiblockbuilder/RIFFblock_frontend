@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -12,80 +12,46 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { userApi } from "@/lib/api-client"
+import { toast } from "@/components/ui/use-toast"
 
 interface RiffGalleryProps {
     isOwner: boolean
     isEditing: boolean
+    walletAddress: string
 }
 
-export default function RiffGallery({ isOwner, isEditing }: RiffGalleryProps) {
+export default function RiffGallery({ isOwner, isEditing, walletAddress }: RiffGalleryProps) {
+    const [riffs, setRiffs] = useState<any[]>([])
+    const [isLoading, setIsLoading] = useState(true)
     const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
     const [sortBy, setSortBy] = useState("newest")
     const [playingRiff, setPlayingRiff] = useState<string | null>(null)
 
-    // Mock data for riffs
-    const riffs = [
-        {
-            id: "riff-1",
-            title: "Neon Cascade",
-            image: "/synthwave-album-cover-1.jpg",
-            duration: "0:32",
-            date: "2023-12-15",
-            plays: 1245,
-            tips: 350,
-            isNft: true,
-        },
-        {
-            id: "riff-2",
-            title: "Midnight Drive",
-            image: "/synthwave-album-cover-2.jpg",
-            duration: "0:45",
-            date: "2023-11-28",
-            plays: 987,
-            tips: 210,
-            isNft: true,
-        },
-        {
-            id: "riff-3",
-            title: "Cyber Dawn",
-            image: "/synthwave-album-cover-3.jpg",
-            duration: "0:38",
-            date: "2023-10-05",
-            plays: 2341,
-            tips: 520,
-            isNft: true,
-        },
-        {
-            id: "riff-4",
-            title: "Retro Pulse",
-            image: "/synthwave-album-cover-4.jpg",
-            duration: "0:29",
-            date: "2023-09-17",
-            plays: 1876,
-            tips: 430,
-            isNft: true,
-        },
-        {
-            id: "riff-5",
-            title: "Digital Dreams",
-            image: "/synthwave-album-cover-2.jpg",
-            duration: "0:41",
-            date: "2023-08-22",
-            plays: 1532,
-            tips: 280,
-            isNft: true,
-        },
-        {
-            id: "riff-6",
-            title: "Analog Sunset",
-            image: "/synthwave-album-cover-4.jpg",
-            duration: "0:36",
-            date: "2023-07-30",
-            plays: 1124,
-            tips: 190,
-            isNft: false,
-        },
-    ]
+    useEffect(() => {
+        async function fetchRiffs() {
+            if (!walletAddress) {
+                setIsLoading(false)
+                return
+            }
+
+            try {
+                const response = await userApi.getUserNFTs(walletAddress)
+                setRiffs(response.data.nfts || [])
+            } catch (error) {
+                console.error("Error fetching riffs:", error)
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "Failed to load riffs",
+                })
+            } finally {
+                setIsLoading(false)
+            }
+        }
+
+        fetchRiffs()
+    }, [walletAddress])
 
     const togglePlay = (id: string) => {
         if (playingRiff === id) {
