@@ -1,56 +1,44 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Coins, Music, Heart, ArrowUpRight, MessageSquare, RefreshCw } from "lucide-react"
+import { userApi } from "@/lib/api-client"
+import { toast } from "@/components/ui/use-toast"
 
-export default function ActivityFeed() {
-    const [activities, setActivities] = useState([
-        {
-            id: "act-1",
-            type: "upload",
-            title: "Uploaded a new riff",
-            riffTitle: "Neon Cascade",
-            riffImage: "/synthwave-album-cover-1.jpg",
-            timestamp: "2 hours ago",
-        },
-        {
-            id: "act-2",
-            type: "tip",
-            title: "Received 150 RIFF tip",
-            from: "CyberDreamer",
-            fromImage: "/placeholder.svg?height=100&width=100&query=cyberpunk+profile",
-            riffTitle: "Midnight Drive",
-            timestamp: "1 day ago",
-        },
-        {
-            id: "act-3",
-            type: "like",
-            title: "Liked a riff",
-            riffTitle: "Quantum Pulse",
-            artist: "CyberSoul",
-            artistImage: "/placeholder.svg?height=100&width=100&query=futuristic+profile",
-            timestamp: "2 days ago",
-        },
-        {
-            id: "act-4",
-            type: "comment",
-            title: "Commented on",
-            riffTitle: "Digital Dreams",
-            comment: "This bassline is incredible! Would love to collaborate sometime.",
-            timestamp: "3 days ago",
-        },
-        {
-            id: "act-5",
-            type: "stake",
-            title: "Staked 500 RIFF on",
-            riffTitle: "Analog Sunset",
-            artist: "RetroWave",
-            artistImage: "/placeholder.svg?height=100&width=100&query=retro+profile",
-            timestamp: "5 days ago",
-        },
-    ])
+interface ActivityFeedProps {
+    walletAddress: string
+}
+
+export default function ActivityFeed({ walletAddress }: ActivityFeedProps) {
+    const [activities, setActivities] = useState<any[]>([])
+    const [isLoading, setIsLoading] = useState(true)
+
+    useEffect(() => {
+        async function fetchActivities() {
+            if (!walletAddress) {
+                setIsLoading(false)
+                return
+            }
+
+            try {
+                const response = await userApi.getUserActivity(walletAddress)
+                setActivities(response.data.activities || [])
+            } catch (error) {
+                console.error("Error fetching activities:", error)
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "Failed to load activity feed",
+                })
+            } finally {
+                setIsLoading(false)
+            }
+        }
+
+        fetchActivities()
+    }, [walletAddress])
 
     const getActivityIcon = (type: string) => {
         switch (type) {

@@ -1,17 +1,47 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Play, Pause, Heart, Share2, MoreHorizontal } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { userApi } from "@/lib/api-client"
+import { toast } from "@/components/ui/use-toast"
 
 interface FavoriteRiffsProps {
     isOwner: boolean
+    walletAddress: string
 }
 
-export default function FavoriteRiffs({ isOwner }: FavoriteRiffsProps) {
+export default function FavoriteRiffs({ isOwner, walletAddress }: FavoriteRiffsProps) {
+    const [favorites, setFavorites] = useState<any[]>([])
     const [playingRiff, setPlayingRiff] = useState<string | null>(null)
+    const [isLoading, setIsLoading] = useState(true)
+
+    useEffect(() => {
+        async function fetchFavorites() {
+            if (!walletAddress) {
+                setIsLoading(false)
+                return
+            }
+
+            try {
+                const response = await userApi.getUserFavorites(walletAddress)
+                setFavorites(response.data.nfts || [])
+            } catch (error) {
+                console.error("Error fetching favorites:", error)
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "Failed to load favorite riffs",
+                })
+            } finally {
+                setIsLoading(false)
+            }
+        }
+
+        fetchFavorites()
+    }, [walletAddress])
 
     // Mock data for favorite riffs
     const favoriteRiffs = [
@@ -19,28 +49,28 @@ export default function FavoriteRiffs({ isOwner }: FavoriteRiffsProps) {
             id: "fav-1",
             title: "Quantum Pulse",
             artist: "CyberSoul",
-            image: "/favorite-ablbum-cover-1.jpg",
+            image: "/cyberpunk-album-cover-1.png",
             duration: "0:35",
         },
         {
             id: "fav-2",
             title: "Neon Streets",
             artist: "RetroWave",
-            image: "/favorite-ablbum-cover-2.jpg",
+            image: "/cyberpunk-album-cover-2.png",
             duration: "0:42",
         },
         {
             id: "fav-3",
             title: "Digital Horizon",
             artist: "SynthMaster",
-            image: "/favorite-ablbum-cover-3.jpg",
+            image: "/placeholder.svg?height=400&width=400&query=cyberpunk+album+cover+3",
             duration: "0:29",
         },
         {
             id: "fav-4",
             title: "Cyber Dreams",
             artist: "NightDrive",
-            image: "/favorite-ablbum-cover-4.jpg",
+            image: "/placeholder.svg?height=400&width=400&query=cyberpunk+album+cover+4",
             duration: "0:38",
         },
     ]
