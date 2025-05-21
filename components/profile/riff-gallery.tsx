@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { userApi } from "@/lib/api-client"
 import { toast } from "@/components/ui/use-toast"
+import { Riff } from "@/types/api-response"
 
 interface RiffGalleryProps {
     isOwner: boolean
@@ -22,7 +23,7 @@ interface RiffGalleryProps {
 }
 
 export default function RiffGallery({ isOwner, isEditing, walletAddress }: RiffGalleryProps) {
-    const [riffs, setRiffs] = useState<any[]>([])
+    const [riffs, setRiffs] = useState<Riff[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
     const [sortBy, setSortBy] = useState("newest")
@@ -37,7 +38,7 @@ export default function RiffGallery({ isOwner, isEditing, walletAddress }: RiffG
 
             try {
                 const response = await userApi.getUserNFTs(walletAddress)
-                setRiffs(response.data.nfts || [])
+                setRiffs(response || [])
             } catch (error) {
                 console.error("Error fetching riffs:", error)
                 toast({

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useWallet } from "@/contexts/wallet-context"
-import { useAuth } from "@/hooks/use-auth"
+// import { useAuth } from "@/hooks/use-auth"
 import { userApi } from "@/lib/api-client"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -17,13 +17,14 @@ import FavoriteRiffs from "@/components/profile/favorite-riffs"
 import MainLayout from "@/components/layouts/main-layout"
 import CreativeGradientBackground from "@/components/creative-gradient-background"
 import WalletConnect from "@/components/wallet-connect"
+import { UserProfile } from "@/types/api-response"
 
 export default function ProfilePage() {
     const { isConnected, walletAddress } = useWallet()
-    const { userData, getCurrentUser } = useAuth()
+    // const { userData, getCurrentUser } = useAuth()
     const [isEditing, setIsEditing] = useState(false)
     const [activeTab, setActiveTab] = useState("music")
-    const [profile, setProfile] = useState<any>(null)
+    const [profile, setProfile] = useState<UserProfile>()
     const [isLoading, setIsLoading] = useState(true)
 
     // Fetch user profile data
@@ -36,37 +37,13 @@ export default function ProfilePage() {
 
             try {
                 // First try to get the current user's profile
-                const currentUser = await getCurrentUser()
+                // const currentUser = await getCurrentUser()
 
-                if (currentUser) {
-                    // If we have the current user, get their full profile
-                    const response = await userApi.getUserProfile(walletAddress)
-                    setProfile(response.data.user)
-                } else {
-                    // If no current user, use mock data
-                    setProfile({
-                        name: "SYNTHWAVE_92",
-                        bio: "Creating retro-futuristic soundscapes inspired by 80s synth culture and cyberpunk aesthetics. Specializing in atmospheric pads, arpeggiated sequences, and driving basslines.",
-                        location: "Los Angeles, CA",
-                        avatar: "/neon-profile.png",
-                        coverImage: "/profile-cover-image.jpg",
-                        ensName: "synthwave92.eth",
-                        socialLinks: {
-                            twitter: "https://twitter.com/synthwave92",
-                            instagram: "https://instagram.com/synthwave92",
-                            website: "https://synthwave92.com",
-                            bandcamp: "https://synthwave92.bandcamp.com",
-                        },
-                        genres: ["Synthwave", "Retrowave", "Electronic"],
-                        influences: ["Tangerine Dream", "John Carpenter", "Vangelis"],
-                        stats: {
-                            totalRiffs: 42,
-                            totalTips: 24350,
-                            totalStaked: 156000,
-                            followers: 1289,
-                        },
-                    })
-                }
+                // If we have the current user, get their full profile
+                const response = await userApi.getUserProfile(walletAddress)
+                console.log(">>> get user profile response : ", response)
+                setProfile(response)
+
             } catch (error) {
                 console.error("Error fetching profile:", error)
                 toast({
@@ -80,7 +57,7 @@ export default function ProfilePage() {
         }
 
         fetchProfileData()
-    }, [isConnected, walletAddress, getCurrentUser])
+    }, [isConnected, walletAddress])
 
     // Check if the profile belongs to the connected wallet
     const isOwner = false // isConnected && walletAddress.toLowerCase() === (profile?.walletAddress || "").toLowerCase()
@@ -131,21 +108,29 @@ export default function ProfilePage() {
                                     // Create a new profile
                                     setIsEditing(true)
                                     setProfile({
-                                        walletAddress,
+                                        id: "",
+                                        walletAddress: walletAddress,
                                         name: `user_${walletAddress.substring(2, 8)}`,
                                         bio: "",
                                         location: "",
                                         avatar: "",
                                         coverImage: "",
-                                        socialLinks: {},
-                                        genres: [],
-                                        influences: [],
+                                        ensName: "",
+                                        socialLinks: {
+                                            twitter: "",
+                                            instagram: "",
+                                            website: "",
+                                        },
+                                        genres: [""],
+                                        influences: [""],
                                         stats: {
                                             totalRiffs: 0,
                                             totalTips: 0,
                                             totalStaked: 0,
                                             followers: 0,
                                         },
+                                        createdAt: new Date(),
+                                        updatedAt: new Date(),
                                     })
                                 }}
                             >

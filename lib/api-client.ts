@@ -1,6 +1,14 @@
+import axios from "axios"
 import { toast } from "@/components/ui/use-toast"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
+
+const axiosInstance = axios.create({
+    baseURL: API_BASE_URL,
+    headers: {
+        "Content-Type": "application/json",
+    },
+})
 
 interface ApiClientOptions {
     walletAddress?: string
@@ -12,42 +20,29 @@ interface ApiClientOptions {
 export async function apiClient(endpoint: string, options: ApiClientOptions = {}) {
     const { walletAddress, body, method = "GET", headers = {} } = options
 
-    const requestHeaders: Record<string, string> = {
-        "Content-Type": "application/json",
-        ...headers,
-    }
-
-    // Add wallet address to headers if available
-    if (walletAddress) {
-        requestHeaders["x-wallet-address"] = walletAddress
-    }
-
-    const config: RequestInit = {
+    const config = {
+        url: endpoint,
         method,
-        headers: requestHeaders,
-    }
-
-    if (body) {
-        config.body = JSON.stringify(body)
+        headers: {
+            ...headers,
+            "Content-Type": "application/json",
+            // ...(walletAddress ? { "x-wallet-address": walletAddress } : {}),
+        },
+        ...(body ? { data: body } : {}),
     }
 
     try {
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, config)
-        const data = await response.json()
-
-        if (!response.ok) {
-            throw new Error(data.message || "Something went wrong")
-        }
-
-        return data
-    } catch (error) {
+        const response = await axiosInstance.request(config)
+        return response.data
+    } catch (error: any) {
+        const message = error.response?.data?.message || error.message || "Something went wrong"
         console.error("API request failed:", error)
         toast({
             variant: "destructive",
             title: "Request Failed",
-            description: error instanceof Error ? error.message : "Something went wrong",
+            description: message,
         })
-        throw error
+        throw new Error(message)
     }
 }
 

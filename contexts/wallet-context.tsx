@@ -13,7 +13,7 @@ interface WalletContextType {
     walletAddress: string
     walletType: WalletType
     walletBalance: string
-    isAuthenticated: boolean
+    // isAuthenticated: boolean
     connectWallet: (type?: WalletType) => Promise<void>
     disconnectWallet: () => void
     signMessage: (message: string) => Promise<string | null>
@@ -24,7 +24,7 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined)
 export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [isConnecting, setIsConnecting] = useState(false)
     const [isConnected, setIsConnected] = useState(false)
-    const [isAuthenticated, setIsAuthenticated] = useState(false)
+    // const [isAuthenticated, setIsAuthenticated] = useState(false)
     const [walletAddress, setWalletAddress] = useState("")
     const [walletType, setWalletType] = useState<WalletType>(null)
     const [walletBalance, setWalletBalance] = useState("0.00")
@@ -91,7 +91,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const address = accounts[0]
             setWalletAddress(address)
             setIsConnected(true)
-            setIsAuthenticated(true) // In wallet-based auth, connection = authentication
+            // setIsAuthenticated(true) // In wallet-based auth, connection = authentication
 
             // Mock balance for demo purposes
             const randomBalance = (Math.random() * 10).toFixed(4)
@@ -107,7 +107,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     // Handle disconnection
     const handleDisconnect = () => {
         setIsConnected(false)
-        setIsAuthenticated(false)
+        // setIsAuthenticated(false)
         setWalletAddress("")
         setWalletBalance("0.00")
     }
@@ -187,7 +187,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 walletAddress,
                 walletType,
                 walletBalance,
-                isAuthenticated,
+                // isAuthenticated,
                 connectWallet,
                 disconnectWallet,
                 signMessage,
