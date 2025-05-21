@@ -1,17 +1,50 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Coins, Percent, Info, Save } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { stakingApi } from "@/lib/api-client"
+import { toast } from "@/components/ui/use-toast"
 
-export default function StakingSettings() {
+interface StakingSettingsProps {
+    walletAddress: string
+}
+
+export default function StakingSettings({ walletAddress }: StakingSettingsProps) {
+    const [stakingSettings, setStakingSettings] = useState<any>(null)
+    const [isLoading, setIsLoading] = useState(true)
     const [stakingEnabled, setStakingEnabled] = useState(true)
     const [defaultRoyalty, setDefaultRoyalty] = useState("10")
     const [minimumStake, setMinimumStake] = useState("500")
+
+    useEffect(() => {
+        async function fetchStakingSettings() {
+            if (!walletAddress) {
+                setIsLoading(false)
+                return
+            }
+
+            try {
+                const response = await stakingApi.getStakingSettings(walletAddress)
+                setStakingSettings(response.data.settings || null)
+            } catch (error) {
+                console.error("Error fetching staking settings:", error)
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "Failed to load staking settings",
+                })
+            } finally {
+                setIsLoading(false)
+            }
+        }
+
+        fetchStakingSettings()
+    }, [walletAddress])
 
     return (
         <div className="space-y-6">
