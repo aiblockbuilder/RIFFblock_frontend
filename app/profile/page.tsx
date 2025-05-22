@@ -41,7 +41,7 @@ export default function ProfilePage() {
 
                 // If we have the current user, get their full profile
                 const response = await userApi.getUserProfile(walletAddress)
-                console.log(">>> get user profile response : ", response)
+                // console.log(">>> get user profile response : ", response)
                 setProfile(response)
 
             } catch (error) {
