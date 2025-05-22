@@ -59,3 +59,38 @@ export interface Riff {
     updatedAt: Date
 }
 
+export interface FavoriteRiff {
+    id: number
+    title: string
+    description: string
+    audioFile: string
+    coverImage: string
+    duration: number
+    genre: string
+    mood: string
+    instrument: string
+    keySignature: string
+    timeSignature: string
+    isBargainBin: boolean
+    price: number
+    currency: string
+    royaltyPercentage: number
+    isStakable: boolean
+    stakingRoyaltyShare: number
+    isNft: boolean
+    tokenId: string
+    contractAddress: string
+    unlockSourceFiles: boolean
+    unlockRemixRights: boolean
+    unlockPrivateMessages: boolean
+    unlockBackstageContent: boolean
+    creatorId: number
+    collectionId: number
+    createdAt: Date
+    updatedAt: Date
+    creator: {
+        id: number,
+        name: string
+    }
+}
+

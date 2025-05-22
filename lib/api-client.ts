@@ -74,7 +74,7 @@ export const userApi = {
 
     getUserTippingTiers: (walletAddress: string) => apiClient(`/users/${walletAddress}/tipping-tiers`),
 
-    getUserFavorites: (walletAddress: string, page = 1, limit = 10) =>
+    getUserFavorites: (walletAddress: string, page = 0, limit = 10) =>
         apiClient(`/users/${walletAddress}/favorites?page=${page}&limit=${limit}`),
 }
 

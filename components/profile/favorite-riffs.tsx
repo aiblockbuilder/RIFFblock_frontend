@@ -7,6 +7,7 @@ import { Play, Pause, Heart, Share2, MoreHorizontal } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { userApi } from "@/lib/api-client"
 import { toast } from "@/components/ui/use-toast"
+import { FavoriteRiff } from "@/types/api-response"
 
 interface FavoriteRiffsProps {
     isOwner: boolean
@@ -14,8 +15,8 @@ interface FavoriteRiffsProps {
 }
 
 export default function FavoriteRiffs({ isOwner, walletAddress }: FavoriteRiffsProps) {
-    const [favorites, setFavorites] = useState<any[]>([])
-    const [playingRiff, setPlayingRiff] = useState<string | null>(null)
+    const [favorites, setFavorites] = useState<FavoriteRiff[]>([])
+    const [playingRiff, setPlayingRiff] = useState<Number | null>(null)
     const [isLoading, setIsLoading] = useState(true)
 
     useEffect(() => {
@@ -27,7 +28,8 @@ export default function FavoriteRiffs({ isOwner, walletAddress }: FavoriteRiffsP
 
             try {
                 const response = await userApi.getUserFavorites(walletAddress)
-                setFavorites(response.data.nfts || [])
+                // console.log(">>> get user favorites response : ", response)
+                setFavorites(response)
             } catch (error) {
                 console.error("Error fetching favorites:", error)
                 toast({
@@ -43,39 +45,7 @@ export default function FavoriteRiffs({ isOwner, walletAddress }: FavoriteRiffsP
         fetchFavorites()
     }, [walletAddress])
 
-    // Mock data for favorite riffs
-    const favoriteRiffs = [
-        {
-            id: "fav-1",
-            title: "Quantum Pulse",
-            artist: "CyberSoul",
-            image: "/cyberpunk-album-cover-1.png",
-            duration: "0:35",
-        },
-        {
-            id: "fav-2",
-            title: "Neon Streets",
-            artist: "RetroWave",
-            image: "/cyberpunk-album-cover-2.png",
-            duration: "0:42",
-        },
-        {
-            id: "fav-3",
-            title: "Digital Horizon",
-            artist: "SynthMaster",
-            image: "/placeholder.svg?height=400&width=400&query=cyberpunk+album+cover+3",
-            duration: "0:29",
-        },
-        {
-            id: "fav-4",
-            title: "Cyber Dreams",
-            artist: "NightDrive",
-            image: "/placeholder.svg?height=400&width=400&query=cyberpunk+album+cover+4",
-            duration: "0:38",
-        },
-    ]
-
-    const togglePlay = (id: string) => {
+    const togglePlay = (id: Number) => {
         if (playingRiff === id) {
             setPlayingRiff(null)
         } else {
@@ -93,30 +63,30 @@ export default function FavoriteRiffs({ isOwner, walletAddress }: FavoriteRiffsP
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {favoriteRiffs.map((riff) => (
+                {favorites.map((favorite) => (
                     <div
-                        key={riff.id}
+                        key={favorite.id}
                         className="bg-zinc-900/50 backdrop-blur-sm border border-zinc-800 rounded-lg overflow-hidden hover:border-violet-500/30 transition-all group"
                     >
                         <div className="relative aspect-square">
-                            <Image src={riff.image || "/placeholder.svg"} alt={riff.title} fill className="object-cover" />
+                            <Image src={favorite.coverImage || "/placeholder.svg"} alt={favorite.title} fill className="object-cover" />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                 <button
-                                    onClick={() => togglePlay(riff.id)}
+                                    onClick={() => togglePlay(favorite.id)}
                                     className="w-10 h-10 rounded-full bg-violet-600/90 hover:bg-violet-700/90 flex items-center justify-center transition-all transform scale-90 group-hover:scale-100"
                                 >
-                                    {playingRiff === riff.id ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
+                                    {playingRiff === favorite.id ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
                                 </button>
                             </div>
                             <div className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/60 backdrop-blur-sm rounded text-xs text-zinc-300">
-                                {riff.duration}
+                                {favorite.duration}
                             </div>
                         </div>
                         <div className="p-3">
                             <div className="flex justify-between items-start">
                                 <div>
-                                    <h3 className="font-medium text-sm truncate">{riff.title}</h3>
-                                    <p className="text-xs text-zinc-500 truncate">by {riff.artist}</p>
+                                    <h3 className="font-medium text-sm truncate">{favorite.title}</h3>
+                                    <p className="text-xs text-zinc-500 truncate">by {favorite.creator.name}</p>
                                 </div>
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>

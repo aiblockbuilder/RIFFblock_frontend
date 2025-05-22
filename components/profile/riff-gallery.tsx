@@ -38,6 +38,7 @@ export default function RiffGallery({ isOwner, isEditing, walletAddress }: RiffG
 
             try {
                 const response = await userApi.getUserNFTs(walletAddress)
+                // console.log(">>> get user nft response : \n", response)
                 setRiffs(response || [])
             } catch (error) {
                 console.error("Error fetching riffs:", error)
@@ -109,13 +110,13 @@ export default function RiffGallery({ isOwner, isEditing, walletAddress }: RiffG
                             className="bg-zinc-900/50 backdrop-blur-sm border border-zinc-800 rounded-lg overflow-hidden hover:border-violet-500/30 transition-all group"
                         >
                             <div className="relative aspect-square">
-                                <Image src={riff.image || "/placeholder.svg"} alt={riff.title} fill className="object-cover" />
+                                <Image src={riff?.coverImage || "/placeholder.svg"} alt={riff.title} fill className="object-cover" />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                     <button
-                                        onClick={() => togglePlay(riff.id)}
+                                        onClick={() => togglePlay(riff?.id.toString())}
                                         className="w-12 h-12 rounded-full bg-violet-600/90 hover:bg-violet-700/90 flex items-center justify-center transition-all transform scale-90 group-hover:scale-100"
                                     >
-                                        {playingRiff === riff.id ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 ml-0.5" />}
+                                        {playingRiff === riff?.id.toString() ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 ml-0.5" />}
                                     </button>
                                 </div>
                                 {riff.isNft && (
@@ -158,8 +159,8 @@ export default function RiffGallery({ isOwner, isEditing, walletAddress }: RiffG
                                     </DropdownMenu>
                                 </div>
                                 <div className="flex justify-between items-center mt-2 text-xs text-zinc-500">
-                                    <div>{riff.plays.toLocaleString()} plays</div>
-                                    <div className="text-violet-400">{riff.tips.toLocaleString()} RIFF</div>
+                                    {/* <div>{riff.plays.toLocaleString()} plays</div> */}
+                                    {/* <div className="text-violet-400">{riff.tips.toLocaleString()} RIFF</div> */}
                                 </div>
                             </div>
                         </div>
@@ -173,24 +174,24 @@ export default function RiffGallery({ isOwner, isEditing, walletAddress }: RiffG
                             className="flex items-center gap-4 p-3 bg-zinc-900/50 backdrop-blur-sm border border-zinc-800 rounded-lg hover:border-violet-500/30 transition-all"
                         >
                             <div className="relative w-12 h-12 rounded-md overflow-hidden flex-shrink-0">
-                                <Image src={riff.image || "/placeholder.svg"} alt={riff.title} fill className="object-cover" />
+                                <Image src={riff.coverImage || "/placeholder.svg"} alt={riff.title} fill className="object-cover" />
                                 {riff.isNft && <div className="absolute top-0.5 right-0.5 w-2 h-2 bg-blue-500 rounded-full"></div>}
                             </div>
                             <div className="flex-1 min-w-0">
                                 <h3 className="font-medium text-sm truncate">{riff.title}</h3>
                                 <div className="flex items-center gap-3 mt-1 text-xs text-zinc-500">
-                                    <div>{riff.plays.toLocaleString()} plays</div>
+                                    {/* <div>{riff.plays.toLocaleString()} plays</div> */}
                                     <div>{riff.duration}</div>
-                                    <div>{new Date(riff.date).toLocaleDateString()}</div>
+                                    <div>{new Date(riff.createdAt).toLocaleDateString()}</div>
                                 </div>
                             </div>
-                            <div className="text-sm text-violet-400 font-medium">{riff.tips.toLocaleString()} RIFF</div>
+                            {/* <div className="text-sm text-violet-400 font-medium">{riff.tips.toLocaleString()} RIFF</div> */}
                             <div className="flex items-center gap-2">
                                 <button
-                                    onClick={() => togglePlay(riff.id)}
+                                    onClick={() => togglePlay(riff.id.toString())}
                                     className="w-8 h-8 rounded-full bg-zinc-800 hover:bg-violet-600/90 flex items-center justify-center transition-colors"
                                 >
-                                    {playingRiff === riff.id ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
+                                    {playingRiff === riff.id.toString() ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
                                 </button>
                                 <button className="p-1.5 text-zinc-400 hover:text-zinc-300">
                                     <Heart className="h-4 w-4" />
