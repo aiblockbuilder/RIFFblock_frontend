@@ -24,7 +24,7 @@ export default function ActivityFeed({ walletAddress }: ActivityFeedProps) {
 
             try {
                 const response = await userApi.getUserActivity(walletAddress)
-                setActivities(response.data.activities || [])
+                setActivities(response)
             } catch (error) {
                 console.error("Error fetching activities:", error)
                 toast({
