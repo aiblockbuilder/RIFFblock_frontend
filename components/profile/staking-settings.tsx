@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Coins, Percent, Info, Save } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { stakingApi } from "@/lib/api-client"
+import { userApi } from "@/lib/api-client"
 import { toast } from "@/components/ui/use-toast"
 import type { StakingSettings } from "@/types/api-response"
 
@@ -28,7 +28,7 @@ export default function StakingSettings({ walletAddress }: StakingSettingsProps)
             }
 
             try {
-                const response = await stakingApi.getStakingSettings(walletAddress)
+                const response = await userApi.getStakingSettings(walletAddress)
                 // console.log(">>> Staking settings fetched:", response)
                 setStakingSettings(response)
             } catch (error) {
@@ -51,7 +51,7 @@ export default function StakingSettings({ walletAddress }: StakingSettingsProps)
 
         setIsSaving(true)
         try {
-            const response = await stakingApi.updateStakingSettings(walletAddress, {
+            const response = await userApi.updateStakingSettings(walletAddress, {
                 defaultStakingEnabled: stakingSettings.defaultStakingEnabled,
                 defaultRoyaltyShare: stakingSettings.defaultRoyaltyShare,
                 minimumStakeAmount: stakingSettings.minimumStakeAmount,
