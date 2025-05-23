@@ -1,5 +1,6 @@
 import axios from "axios"
 import { toast } from "@/components/ui/use-toast"
+import { UpdateProfileData, UserProfile, TippingTier, StakingSettings } from "@/types/api-response"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
 
@@ -60,22 +61,35 @@ export const authApi = {
 export const userApi = {
     getUserProfile: (walletAddress: string) => apiClient(`/users/${walletAddress}`),
 
-    updateProfile: (walletAddress: string, profileData: any) =>
-        apiClient("/users/me", { method: "PATCH", body: profileData, walletAddress }),
+    updateProfile: (walletAddress: string, profileData: UpdateProfileData) =>
+        apiClient(`/users/${walletAddress}`, { method: "PUT", body: profileData, walletAddress }),
 
-    getUserNFTs: (walletAddress: string, page = 1, limit = 10, type = "created") =>
+    getUserNFTs: (walletAddress: string, page = 0, limit = 10, type = "created") =>
         apiClient(`/users/${walletAddress}/nfts?page=${page}&limit=${limit}&type=${type}`),
 
-    getUserCollections: (walletAddress: string, page = 1, limit = 10) =>
+    getUserCollections: (walletAddress: string, page = 0, limit = 10) =>
         apiClient(`/users/${walletAddress}/collections?page=${page}&limit=${limit}`),
 
-    getUserActivity: (walletAddress: string, page = 1, limit = 20) =>
+    getAllActivity: (page = 0, limit = 5) =>
+        apiClient(`/activity?page=${page}&limit=${limit}`),
+
+    getUserActivity: (walletAddress: string, page = 0, limit = 5) =>
         apiClient(`/users/${walletAddress}/activity?page=${page}&limit=${limit}`),
 
-    getUserTippingTiers: (walletAddress: string) => apiClient(`/users/${walletAddress}/tipping-tiers`),
+    getUserTippingTiers: (walletAddress: string) => apiClient(`/tipping/tiers/${walletAddress}`),
 
+    
     getUserFavorites: (walletAddress: string, page = 0, limit = 10) =>
         apiClient(`/users/${walletAddress}/favorites?page=${page}&limit=${limit}`),
+    
+    createTippingTier: (walletAddress: string, tierData: Omit<TippingTier, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) =>
+        apiClient(`/tipping/tiers`, { method: "POST", body: { walletAddress, ...tierData } }),
+
+    updateTippingTier: (tierId: number, tierData: Partial<TippingTier>) =>
+        apiClient(`/tipping/tiers/${tierId}`, { method: "PUT", body: tierData }),
+
+    deleteTippingTier: (tierId: number) =>
+        apiClient(`/tipping/tiers/${tierId}`, { method: "DELETE" }),
 }
 
 // NFT API
@@ -106,7 +120,19 @@ export const collectionApi = {
 
 // Staking API
 export const stakingApi = {
-    getStakingSettings: (walletAddress: string) => apiClient("/staking/settings", { walletAddress }),
+    getStakingSettings: (walletAddress: string) => apiClient(`/users/${walletAddress}/staking-settings`, { walletAddress }),
 
-    // Add other staking-related API calls
+    updateStakingSettings: (walletAddress: string, settings: {
+        defaultStakingEnabled: boolean;
+        defaultRoyaltyShare: number;
+        minimumStakeAmount: number;
+        lockPeriodDays: number;
+    }): Promise<{
+        message: string;
+        settings: StakingSettings;
+    }> => apiClient(`/users/${walletAddress}/staking-settings`, { 
+        method: "PUT", 
+        body: settings,
+        walletAddress 
+    }),
 }

@@ -7,21 +7,25 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Copy, Twitter, Instagram, Globe, MapPin, Camera } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
+import { userApi } from "@/lib/api-client"
+import { UpdateProfileData, UserProfile } from "@/types/api-response"
 
 interface ProfileHeaderProps {
-    profile: any
+    profile: UserProfile
     isOwner: boolean
     isEditing: boolean
     setIsEditing: (value: boolean) => void
+    onSave?: (updatedProfile: Partial<UserProfile>) => Promise<void>
 }
 
-export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditing }: ProfileHeaderProps) {
-    const [name, setName] = useState(profile.name)
-    const [bio, setBio] = useState(profile.bio)
-    const [location, setLocation] = useState(profile.location)
-    const [twitter, setTwitter] = useState(profile.socialLinks.twitter)
-    const [instagram, setInstagram] = useState(profile.socialLinks.instagram)
-    const [website, setWebsite] = useState(profile.socialLinks.website)
+export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditing, onSave }: ProfileHeaderProps) {
+    const [name, setName] = useState(profile.name || "")
+    const [bio, setBio] = useState(profile.bio || "")
+    const [location, setLocation] = useState(profile.location || "")
+    const [twitter, setTwitter] = useState(profile.socialLinks?.twitterUrl || "")
+    const [instagram, setInstagram] = useState(profile.socialLinks?.instagramUrl || "")
+    const [website, setWebsite] = useState(profile.socialLinks?.websiteUrl || "")
+    const [isSaving, setIsSaving] = useState(false)
 
     const copyWalletAddress = () => {
         navigator.clipboard.writeText(profile.ensName || "0x1234...5678")
@@ -29,6 +33,45 @@ export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditin
             title: "Address Copied",
             description: "Wallet address copied to clipboard.",
         })
+    }
+
+    const handleSave = async () => {
+        setIsSaving(true)
+        try {
+            const updatedProfile: UpdateProfileData = {
+                name: name || undefined,
+                bio: bio || undefined,
+                location: location || undefined,
+                twitterUrl: twitter || undefined,
+                instagramUrl: instagram || undefined,
+                websiteUrl: website || undefined,
+                // Only include genres and influences if they exist
+                ...(profile.genres && { genres: profile.genres }),
+                ...(profile.influences && { influences: profile.influences })
+            }
+            
+            if (onSave) {
+                await onSave(updatedProfile)
+            } else {
+                await userApi.updateProfile(profile.walletAddress, updatedProfile)
+            }
+            
+            toast({
+                title: "Profile Updated",
+                description: "Your profile has been successfully updated.",
+            })
+            
+            setIsEditing(false)
+        } catch (error) {
+            console.error("Error updating profile:", error)
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Failed to update profile. Please try again.",
+            })
+        } finally {
+            setIsSaving(false)
+        }
     }
 
     return (
@@ -51,7 +94,7 @@ export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditin
                 <div className="flex flex-col md:flex-row gap-6">
                     {/* Avatar */}
                     <div className="relative w-32 h-32 md:w-40 md:h-40 rounded-xl overflow-hidden border-4 border-[#0d0d0d] bg-zinc-900">
-                        <Image src={profile.avatar || "/neon-profile.png"} alt={profile.name} fill className="object-cover" />
+                        <Image src={profile.avatar || "/neon-profile.png"} alt={profile.name || "Profile"} fill className="object-cover" />
                         {isEditing && (
                             <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                                 <Button variant="outline" size="sm" className="bg-black/50 border-white/20">
@@ -141,12 +184,12 @@ export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditin
                         {/* Genres & Influences */}
                         {!isEditing && (
                             <div className="mt-4 flex flex-wrap gap-2">
-                                {profile.genres.map((genre: string) => (
+                                {profile.genres?.map((genre: string) => (
                                     <span key={genre} className="px-2 py-1 bg-violet-500/20 text-violet-300 rounded-full text-xs">
                                         {genre}
                                     </span>
                                 ))}
-                                {profile.influences.map((influence: string) => (
+                                {profile.influences?.map((influence: string) => (
                                     <span key={influence} className="px-2 py-1 bg-blue-500/20 text-blue-300 rounded-full text-xs">
                                         {influence}
                                     </span>
@@ -188,9 +231,9 @@ export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditin
                                 </div>
                             ) : (
                                 <>
-                                    {profile.socialLinks.twitter && (
+                                    {profile.socialLinks?.twitterUrl && (
                                         <a
-                                            href={profile.socialLinks.twitter}
+                                            href={profile.socialLinks.twitterUrl}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="p-2 bg-zinc-900/50 border border-zinc-800 rounded-lg hover:bg-zinc-800/50 transition-colors"
@@ -198,9 +241,9 @@ export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditin
                                             <Twitter className="h-5 w-5 text-[#1DA1F2]" />
                                         </a>
                                     )}
-                                    {profile.socialLinks.instagram && (
+                                    {profile.socialLinks?.instagramUrl && (
                                         <a
-                                            href={profile.socialLinks.instagram}
+                                            href={profile.socialLinks.instagramUrl}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="p-2 bg-zinc-900/50 border border-zinc-800 rounded-lg hover:bg-zinc-800/50 transition-colors"
@@ -208,9 +251,9 @@ export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditin
                                             <Instagram className="h-5 w-5 text-[#E1306C]" />
                                         </a>
                                     )}
-                                    {profile.socialLinks.website && (
+                                    {profile.socialLinks?.websiteUrl && (
                                         <a
-                                            href={profile.socialLinks.website}
+                                            href={profile.socialLinks.websiteUrl}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="p-2 bg-zinc-900/50 border border-zinc-800 rounded-lg hover:bg-zinc-800/50 transition-colors"
@@ -221,6 +264,26 @@ export default function ProfileHeader({ profile, isOwner, isEditing, setIsEditin
                                 </>
                             )}
                         </div>
+
+                        {/* Save Changes Button */}
+                        {isEditing && (
+                            <div className="mt-6 flex justify-end gap-3">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setIsEditing(false)}
+                                    className="border-zinc-800 text-zinc-400 hover:text-zinc-300"
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    onClick={handleSave}
+                                    disabled={isSaving}
+                                    className="bg-violet-500 hover:bg-violet-600"
+                                >
+                                    {isSaving ? "Saving..." : "Save Changes"}
+                                </Button>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

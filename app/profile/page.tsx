@@ -60,7 +60,16 @@ export default function ProfilePage() {
     }, [isConnected, walletAddress])
 
     // Check if the profile belongs to the connected wallet
-    const isOwner = false // isConnected && walletAddress.toLowerCase() === (profile?.walletAddress || "").toLowerCase()
+    const isOwner = true // isConnected && walletAddress.toLowerCase() === (profile?.walletAddress || "").toLowerCase()
+
+    const handleProfileSave = async (updatedProfile: Partial<UserProfile>) => {
+        if (isConnected && walletAddress) {
+            await userApi.updateProfile(walletAddress, updatedProfile)
+            // Refresh profile data
+            const response = await userApi.getUserProfile(walletAddress)
+            setProfile(response)
+        }
+    }
 
     if (isLoading) {
         return (
@@ -111,11 +120,11 @@ export default function ProfilePage() {
                                         id: "",
                                         walletAddress: walletAddress,
                                         name: `user_${walletAddress.substring(2, 8)}`,
-                                        bio: "",
-                                        location: "",
-                                        avatar: "",
-                                        coverImage: "",
-                                        ensName: "",
+                                        bio: "sample bio",
+                                        location: "sample loaction",
+                                        avatar: "/sample-avatar",
+                                        coverImage: "/sample-cover-image",
+                                        ensName: "sample-ens-name",
                                         socialLinks: {
                                             twitter: "",
                                             instagram: "",
@@ -149,7 +158,13 @@ export default function ProfilePage() {
                 <div className="min-h-screen pb-16">
                     <div className="container px-4 md:px-6 py-8 max-w-6xl mx-auto">
                         {/* Profile Header */}
-                        <ProfileHeader profile={profile} isOwner={isOwner} isEditing={isEditing} setIsEditing={setIsEditing} />
+                        <ProfileHeader 
+                            profile={profile} 
+                            isOwner={isOwner} 
+                            isEditing={isEditing} 
+                            setIsEditing={setIsEditing}
+                            onSave={handleProfileSave}
+                        />
 
                         {/* Main Content */}
                         <div className="mt-8">
@@ -191,51 +206,6 @@ export default function ProfilePage() {
                                             <Edit className="mr-2 h-4 w-4" />
                                             Edit Profile
                                         </Button>
-                                    )}
-
-                                    {isOwner && isEditing && (
-                                        <div className="flex gap-2">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="border-red-500/50 text-red-400 hover:bg-red-500/10"
-                                                onClick={() => setIsEditing(false)}
-                                            >
-                                                Cancel
-                                            </Button>
-                                            <Button
-                                                size="sm"
-                                                className="bg-violet-600 hover:bg-violet-700"
-                                                onClick={async () => {
-                                                    try {
-                                                        // Update profile using the API
-                                                        if (isConnected && walletAddress) {
-                                                            await userApi.updateProfile(walletAddress, {
-                                                                username: profile.name,
-                                                                bio: profile.bio,
-                                                                location: profile.location,
-                                                                // Add other profile fields
-                                                            })
-                                                        }
-                                                        setIsEditing(false)
-                                                        toast({
-                                                            title: "Profile Updated",
-                                                            description: "Your profile has been successfully updated.",
-                                                        })
-                                                    } catch (error) {
-                                                        console.error("Error updating profile:", error)
-                                                        toast({
-                                                            variant: "destructive",
-                                                            title: "Update Failed",
-                                                            description: "Failed to update your profile. Please try again.",
-                                                        })
-                                                    }
-                                                }}
-                                            >
-                                                <Save className="mr-2 h-4 w-4" />
-                                                Save Changes
-                                            </Button>
-                                        </div>
                                     )}
                                 </div>
 
