@@ -7,9 +7,10 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Coins, Lock, Plus, Trash2, Edit, Save } from "lucide-react"
+import { Coins, Lock, Plus, Trash2, Edit, Save, X } from "lucide-react"
 import { userApi } from "@/lib/api-client"
 import { toast } from "@/components/ui/use-toast"
+import { TippingTier } from "@/types/api-response"
 
 interface TippingTiersProps {
     isOwner: boolean
@@ -18,8 +19,15 @@ interface TippingTiersProps {
 }
 
 export default function TippingTiers({ isOwner, isEditing, walletAddress }: TippingTiersProps) {
-    const [tippingTiers, setTippingTiers] = useState<any[]>([])
+    const [tippingTiers, setTippingTiers] = useState<TippingTier[]>([])
     const [isLoading, setIsLoading] = useState(true)
+    const [isCreating, setIsCreating] = useState(false)
+    const [newTier, setNewTier] = useState({
+        name: "",
+        amount: "",
+        description: "",
+        perks: [""]
+    })
 
     useEffect(() => {
         async function fetchTippingTiers() {
@@ -30,7 +38,7 @@ export default function TippingTiers({ isOwner, isEditing, walletAddress }: Tipp
 
             try {
                 const response = await userApi.getUserTippingTiers(walletAddress)
-                setTippingTiers(response.data.tippingTiers || [])
+                setTippingTiers(response)
             } catch (error) {
                 console.error("Error fetching tipping tiers:", error)
                 toast({
@@ -46,40 +54,13 @@ export default function TippingTiers({ isOwner, isEditing, walletAddress }: Tipp
         fetchTippingTiers()
     }, [walletAddress])
 
-    const [tiers, setTiers] = useState([
-        {
-            id: "tier-1",
-            name: "Supporter",
-            amount: 100,
-            description: "Access to exclusive behind-the-scenes content and early previews of upcoming riffs.",
-            perks: ["Exclusive updates", "Early access to new riffs"],
-            image: "/placeholder-z2znj.png",
-        },
-        {
-            id: "tier-2",
-            name: "Enthusiast",
-            amount: 500,
-            description: "All previous perks plus access to private livestreams and unreleased demo riffs.",
-            perks: ["Private livestreams", "Unreleased demos", "Monthly Q&A"],
-            image: "/synthwave-badge-2.png",
-        },
-        {
-            id: "tier-3",
-            name: "Patron",
-            amount: 1000,
-            description: "All previous perks plus personalized feedback on your own music and exclusive collaborations.",
-            perks: ["Personalized feedback", "Exclusive collaborations", "Discord role"],
-            image: "/synthwave-badge-03.png",
-        },
-    ])
-
-    const [editingTier, setEditingTier] = useState<string | null>(null)
+    const [editingTier, setEditingTier] = useState<number | null>(null)
     const [newTierName, setNewTierName] = useState("")
     const [newTierAmount, setNewTierAmount] = useState("")
     const [newTierDescription, setNewTierDescription] = useState("")
 
-    const startEditingTier = (tierId: string) => {
-        const tier = tiers.find((t) => t.id === tierId)
+    const startEditingTier = (tierId: number) => {
+        const tier = tippingTiers.find((t) => t.id === tierId)
         if (tier) {
             setNewTierName(tier.name)
             setNewTierAmount(tier.amount.toString())
@@ -88,29 +69,159 @@ export default function TippingTiers({ isOwner, isEditing, walletAddress }: Tipp
         }
     }
 
-    const saveTierChanges = (tierId: string) => {
-        setTiers(
-            tiers.map((tier) => {
-                if (tier.id === tierId) {
-                    return {
-                        ...tier,
-                        name: newTierName,
-                        amount: Number.parseInt(newTierAmount),
-                        description: newTierDescription,
+    const saveTierChanges = async (tierId: number) => {
+        try {
+            const updatedTierData = {
+                name: newTierName,
+                amount: Number.parseInt(newTierAmount),
+                description: newTierDescription,
+                // Keep existing perks if not being updated
+                perks: tippingTiers.find(t => t.id === tierId)?.perks
+            }
+
+            const response = await userApi.updateTippingTier(tierId, updatedTierData)
+            
+            // Update local state with the response data
+            setTippingTiers(
+                tippingTiers.map((tier) => {
+                    if (tier.id === tierId) {
+                        return response.tier
                     }
-                }
-                return tier
-            }),
-        )
-        setEditingTier(null)
+                    return tier
+                })
+            )
+
+            toast({
+                title: "Success",
+                description: "Tipping tier updated successfully",
+            })
+
+            setEditingTier(null)
+        } catch (error) {
+            console.error("Error updating tipping tier:", error)
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Failed to update tipping tier. Please try again.",
+            })
+        }
+    }
+
+    const handleAddTier = () => {
+        setIsCreating(true)
+        setNewTier({
+            name: "",
+            amount: "",
+            description: "",
+            perks: [""]
+        })
+    }
+
+    const handleCancelCreate = () => {
+        setIsCreating(false)
+        setNewTier({
+            name: "",
+            amount: "",
+            description: "",
+            perks: [""]
+        })
+    }
+
+    const handleAddPerk = () => {
+        setNewTier(prev => ({
+            ...prev,
+            perks: [...prev.perks, ""]
+        }))
+    }
+
+    const handleRemovePerk = (index: number) => {
+        setNewTier(prev => ({
+            ...prev,
+            perks: prev.perks.filter((_, i) => i !== index)
+        }))
+    }
+
+    const handlePerkChange = (index: number, value: string) => {
+        setNewTier(prev => ({
+            ...prev,
+            perks: prev.perks.map((perk, i) => i === index ? value : perk)
+        }))
+    }
+
+    const handleCreateTier = async () => {
+        try {
+            if (!newTier.name || !newTier.amount) {
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: "Name and amount are required",
+                })
+                return
+            }
+
+            const tierData = {
+                name: newTier.name,
+                amount: Number(newTier.amount),
+                description: newTier.description || "",
+                perks: newTier.perks.filter(perk => perk.trim() !== "")
+            }
+
+            const response = await userApi.createTippingTier(walletAddress, tierData)
+            
+            setTippingTiers(prev => [...prev, response.tier])
+            
+            toast({
+                title: "Success",
+                description: "Tipping tier created successfully",
+            })
+
+            setIsCreating(false)
+        } catch (error) {
+            console.error("Error creating tipping tier:", error)
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Failed to create tipping tier. Please try again.",
+            })
+        }
+    }
+
+    const handleDeleteTier = async (tierId: number) => {
+        try {
+            await userApi.deleteTippingTier(tierId)
+            
+            // Update local state by removing the deleted tier
+            setTippingTiers(prev => prev.filter(tier => tier.id !== tierId))
+            
+            toast({
+                title: "Success",
+                description: "Tipping tier deleted successfully",
+            })
+        } catch (error) {
+            console.error("Error deleting tipping tier:", error)
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Failed to delete tipping tier. Please try again.",
+            })
+        }
+    }
+
+    if (isLoading) {
+        return <div>Loading...</div>
     }
 
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold">Backstage Access</h2>
-                {isOwner && !isEditing && (
-                    <Button variant="outline" size="sm" className="border-violet-500/50 text-violet-400 hover:bg-violet-500/10">
+                {isOwner && !isEditing && !isCreating && (
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="border-violet-500/50 text-violet-400 hover:bg-violet-500/10"
+                        onClick={handleAddTier}
+                    >
                         <Plus className="mr-2 h-4 w-4" />
                         Add Tier
                     </Button>
@@ -118,7 +229,103 @@ export default function TippingTiers({ isOwner, isEditing, walletAddress }: Tipp
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {tiers.map((tier) => (
+                {isCreating && (
+                    <div className="bg-zinc-900/50 backdrop-blur-sm border border-zinc-800 rounded-lg overflow-hidden hover:border-violet-500/30 transition-all">
+                        <div className="p-4 space-y-4">
+                            <div className="flex justify-between items-center">
+                                <h3 className="font-bold text-lg">Create New Tier</h3>
+                                <button
+                                    onClick={handleCancelCreate}
+                                    className="p-1.5 bg-zinc-800/80 rounded-full text-zinc-400 hover:text-zinc-300"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="new-tier-name">Tier Name</Label>
+                                <Input
+                                    id="new-tier-name"
+                                    value={newTier.name}
+                                    onChange={(e) => setNewTier(prev => ({ ...prev, name: e.target.value }))}
+                                    className="bg-zinc-800/50 border-zinc-700"
+                                    placeholder="Enter tier name"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="new-tier-amount">RIFF Amount</Label>
+                                <Input
+                                    id="new-tier-amount"
+                                    value={newTier.amount}
+                                    onChange={(e) => setNewTier(prev => ({ ...prev, amount: e.target.value.replace(/[^0-9]/g, "") }))}
+                                    className="bg-zinc-800/50 border-zinc-700"
+                                    placeholder="Enter amount"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="new-tier-description">Description</Label>
+                                <Textarea
+                                    id="new-tier-description"
+                                    value={newTier.description}
+                                    onChange={(e) => setNewTier(prev => ({ ...prev, description: e.target.value }))}
+                                    className="bg-zinc-800/50 border-zinc-700"
+                                    placeholder="Enter description"
+                                    rows={3}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <div className="flex justify-between items-center">
+                                    <Label>Perks</Label>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handleAddPerk}
+                                        className="border-zinc-700 text-zinc-400"
+                                    >
+                                        <Plus className="mr-2 h-4 w-4" />
+                                        Add Perk
+                                    </Button>
+                                </div>
+                                {newTier.perks.map((perk, index) => (
+                                    <div key={index} className="flex gap-2">
+                                        <Input
+                                            value={perk}
+                                            onChange={(e) => handlePerkChange(index, e.target.value)}
+                                            className="bg-zinc-800/50 border-zinc-700"
+                                            placeholder={`Perk ${index + 1}`}
+                                        />
+                                        <button
+                                            onClick={() => handleRemovePerk(index)}
+                                            className="p-2 bg-zinc-800/80 rounded-lg text-zinc-400 hover:text-red-400"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="flex justify-end gap-2 pt-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-zinc-700 text-zinc-400"
+                                    onClick={handleCancelCreate}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    className="bg-violet-600 hover:bg-violet-700"
+                                    onClick={handleCreateTier}
+                                >
+                                    <Save className="mr-2 h-4 w-4" />
+                                    Create Tier
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {tippingTiers.map((tier) => (
                     <div
                         key={tier.id}
                         className="bg-zinc-900/50 backdrop-blur-sm border border-zinc-800 rounded-lg overflow-hidden hover:border-violet-500/30 transition-all"
@@ -177,7 +384,7 @@ export default function TippingTiers({ isOwner, isEditing, walletAddress }: Tipp
                                 <div className="relative h-40 bg-gradient-to-b from-violet-900/30 to-zinc-900/30">
                                     <div className="absolute inset-0 flex items-center justify-center">
                                         <div className="relative w-24 h-24">
-                                            <Image src={tier.image || "/placeholder.svg"} alt={tier.name} fill className="object-contain" />
+                                            <Image src="/unused-idea.png" alt={tier.name} fill className="object-contain" />
                                         </div>
                                     </div>
                                     {isOwner && !isEditing && (
@@ -188,7 +395,10 @@ export default function TippingTiers({ isOwner, isEditing, walletAddress }: Tipp
                                             >
                                                 <Edit className="h-4 w-4" />
                                             </button>
-                                            <button className="p-1.5 bg-zinc-800/80 rounded-full text-zinc-400 hover:text-red-400">
+                                            <button 
+                                                onClick={() => handleDeleteTier(tier.id)}
+                                                className="p-1.5 bg-zinc-800/80 rounded-full text-zinc-400 hover:text-red-400"
+                                            >
                                                 <Trash2 className="h-4 w-4" />
                                             </button>
                                         </div>
@@ -207,7 +417,7 @@ export default function TippingTiers({ isOwner, isEditing, walletAddress }: Tipp
                                         {tier.perks.map((perk, index) => (
                                             <div key={index} className="flex items-center gap-2 text-sm">
                                                 <div className="w-1.5 h-1.5 rounded-full bg-violet-500"></div>
-                                                <span>{perk}</span>
+                                                <span>{perk.replace(/['"]/g, '')}</span>
                                             </div>
                                         ))}
                                     </div>
