@@ -1,7 +1,7 @@
 export interface SocialLinks {
-    twitter?: string | null;
-    instagram?: string | null;
-    website?: string | null;
+    twitterUrl?: string;
+    instagramUrl?: string;
+    websiteUrl?: string;
 }
 
 export interface UserStats {
@@ -92,5 +92,75 @@ export interface FavoriteRiff {
         id: number,
         name: string
     }
+}
+
+export interface ActivityUser {
+    id: number;
+    name: string;
+    avatar: string;
+}
+
+export interface BaseActivity {
+    type: 'upload' | 'tip' | 'stake' | 'favorite';
+    riffName: string;
+    riffImage: string;
+    fromUser: ActivityUser;
+    timestamp: string;
+    activityId: string | number;
+}
+
+export interface UploadActivity extends BaseActivity {
+    type: 'upload';
+}
+
+export interface TipActivity extends BaseActivity {
+    type: 'tip';
+    amount: number;
+    toUser: ActivityUser;
+}
+
+export interface StakeActivity extends BaseActivity {
+    type: 'stake';
+    amount: number;
+}
+
+export interface FavoriteActivity extends BaseActivity {
+    type: 'favorite';
+    toUser: ActivityUser;
+}
+
+export type ActivityResponse = UploadActivity | TipActivity | StakeActivity | FavoriteActivity;
+
+export interface UpdateProfileData {
+    name?: string;
+    bio?: string;
+    location?: string;
+    twitterUrl?: string;
+    instagramUrl?: string;
+    websiteUrl?: string;
+    genres?: string[];
+    influences?: string[];
+}
+
+export interface TippingTier {
+    id: number;
+    userId: number;
+    name: string;
+    amount: number;
+    description: string;
+    perks: string[];
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface StakingSettings {
+    id: number;
+    userId: number;
+    defaultStakingEnabled: boolean;
+    defaultRoyaltyShare: number;
+    lockPeriodDays: number;
+    minimumStakeAmount: number;
+    createdAt: string;
+    updatedAt: string;
 }
 
