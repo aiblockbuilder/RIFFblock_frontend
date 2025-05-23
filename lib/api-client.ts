@@ -59,29 +59,29 @@ export const authApi = {
 
 // User API
 export const userApi = {
-    getUserProfile: (walletAddress: string) => apiClient(`/users/${walletAddress}`),
+    getUserProfile: (walletAddress: string) => apiClient(`/users/profile/${walletAddress}`),
 
     updateProfile: (walletAddress: string, profileData: UpdateProfileData) =>
-        apiClient(`/users/${walletAddress}`, { method: "PUT", body: profileData, walletAddress }),
+        apiClient(`/users/profile/${walletAddress}`, { method: "PUT", body: profileData, walletAddress }),
 
     getUserNFTs: (walletAddress: string, page = 0, limit = 10, type = "created") =>
-        apiClient(`/users/${walletAddress}/nfts?page=${page}&limit=${limit}&type=${type}`),
+        apiClient(`/users/profile/${walletAddress}/nfts?page=${page}&limit=${limit}&type=${type}`),
 
     getUserCollections: (walletAddress: string, page = 0, limit = 10) =>
-        apiClient(`/users/${walletAddress}/collections?page=${page}&limit=${limit}`),
+        apiClient(`/users/profile/${walletAddress}/collections?page=${page}&limit=${limit}`),
 
     getAllActivity: (page = 0, limit = 5) =>
         apiClient(`/activity?page=${page}&limit=${limit}`),
 
     getUserActivity: (walletAddress: string, page = 0, limit = 5) =>
-        apiClient(`/users/${walletAddress}/activity?page=${page}&limit=${limit}`),
+        apiClient(`/users/profile/${walletAddress}/activity?page=${page}&limit=${limit}`),
 
     getUserTippingTiers: (walletAddress: string) => apiClient(`/tipping/tiers/${walletAddress}`),
 
-    
+
     getUserFavorites: (walletAddress: string, page = 0, limit = 10) =>
-        apiClient(`/users/${walletAddress}/favorites?page=${page}&limit=${limit}`),
-    
+        apiClient(`/users/profile/${walletAddress}/favorites?page=${page}&limit=${limit}`),
+
     createTippingTier: (walletAddress: string, tierData: Omit<TippingTier, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) =>
         apiClient(`/tipping/tiers`, { method: "POST", body: { walletAddress, ...tierData } }),
 
@@ -90,14 +90,34 @@ export const userApi = {
 
     deleteTippingTier: (tierId: number) =>
         apiClient(`/tipping/tiers/${tierId}`, { method: "DELETE" }),
+
+    getStakingSettings: (walletAddress: string) => apiClient(`/users/profile/${walletAddress}/staking-settings`, { walletAddress }),
+
+    updateStakingSettings: (walletAddress: string, settings: {
+        defaultStakingEnabled: boolean;
+        defaultRoyaltyShare: number;
+        minimumStakeAmount: number;
+        lockPeriodDays: number;
+    }): Promise<{
+        message: string;
+        settings: StakingSettings;
+    }> => apiClient(`/users/profile/${walletAddress}/staking-settings`, {
+        method: "PUT",
+        body: settings,
+        walletAddress
+    }),
+
+    getMostTippedProfile: () => apiClient(`/users/most-tipped`),
 }
 
 // NFT API
 export const nftApi = {
-    createNFT: (walletAddress: string, nftData: any) =>
-        apiClient("/nfts", { method: "POST", body: nftData, walletAddress }),
+    createRiff: (walletAddress: string, nftData: any) =>
+        apiClient("/riffs", { method: "POST", body: nftData, walletAddress }),
 
-    getNFT: (id: string, walletAddress: string) => apiClient(`/nfts/${id}`, { walletAddress }),
+    getRiff: (id: string, walletAddress: string) => apiClient(`/riffs/riff/${id}`, { walletAddress }),
+    getLatestRiff: () => apiClient(`/riffs/latest`),
+    getRandomRiff: () => apiClient(`/riffs/random`),
 
     // Add other NFT-related API calls
 }
@@ -116,23 +136,4 @@ export const collectionApi = {
         apiClient("/collections", { method: "POST", body: collectionData, walletAddress }),
 
     // Add other collection-related API calls
-}
-
-// Staking API
-export const stakingApi = {
-    getStakingSettings: (walletAddress: string) => apiClient(`/users/${walletAddress}/staking-settings`, { walletAddress }),
-
-    updateStakingSettings: (walletAddress: string, settings: {
-        defaultStakingEnabled: boolean;
-        defaultRoyaltyShare: number;
-        minimumStakeAmount: number;
-        lockPeriodDays: number;
-    }): Promise<{
-        message: string;
-        settings: StakingSettings;
-    }> => apiClient(`/users/${walletAddress}/staking-settings`, { 
-        method: "PUT", 
-        body: settings,
-        walletAddress 
-    }),
 }

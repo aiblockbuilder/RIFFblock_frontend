@@ -17,7 +17,7 @@ import FavoriteRiffs from "@/components/profile/favorite-riffs"
 import MainLayout from "@/components/layouts/main-layout"
 import CreativeGradientBackground from "@/components/creative-gradient-background"
 import WalletConnect from "@/components/wallet-connect"
-import { UserProfile } from "@/types/api-response"
+import { UpdateProfileData, UserProfile } from "@/types/api-response"
 
 export default function ProfilePage() {
     const { isConnected, walletAddress } = useWallet()
@@ -64,7 +64,7 @@ export default function ProfilePage() {
 
     const handleProfileSave = async (updatedProfile: Partial<UserProfile>) => {
         if (isConnected && walletAddress) {
-            await userApi.updateProfile(walletAddress, updatedProfile)
+            await userApi.updateProfile(walletAddress, updatedProfile as UpdateProfileData)
             // Refresh profile data
             const response = await userApi.getUserProfile(walletAddress)
             setProfile(response)
@@ -126,9 +126,9 @@ export default function ProfilePage() {
                                         coverImage: "/sample-cover-image",
                                         ensName: "sample-ens-name",
                                         socialLinks: {
-                                            twitter: "",
-                                            instagram: "",
-                                            website: "",
+                                            twitterUrl: "",
+                                            instagramUrl: "",
+                                            websiteUrl: "",
                                         },
                                         genres: [""],
                                         influences: [""],

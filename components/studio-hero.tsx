@@ -6,8 +6,9 @@ import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Play, Pause, Rewind, FastForward } from "lucide-react"
 import WalletConnect from "@/components/wallet-connect"
+import { userApi, nftApi } from "@/lib/api-client"
 
-interface Artist {
+interface MostTippedProfile {
   name: string
   image: string
   riffTips: number
@@ -25,25 +26,60 @@ interface RiffNFT {
 export default function StudioHero() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
-  // Add a new state to track the selected playback mode
   const [playbackMode, setPlaybackMode] = useState<"newest" | "random">("newest")
+  const [featuredArtist, setFeaturedArtist] = useState<MostTippedProfile | null>(null)
+  const [topRiffNFT, setTopRiffNFT] = useState<RiffNFT | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isRiffLoading, setIsRiffLoading] = useState(true)
 
-  // Featured artist data (would come from API in real implementation)
-  const featuredArtist: Artist = {
-    name: "SYNTHWAVE_92",
-    image: "/placeholder.svg?key=kma0c",
-    riffTips: 24350,
-    topRiff: "Neon Cascade",
-  }
+  // Fetch most tipped profile
+  useEffect(() => {
+    async function fetchMostTippedProfile() {
+      try {
+        const response = await userApi.getMostTippedProfile()
+        setFeaturedArtist(response)
+      } catch (error) {
+        console.error("Error fetching most tipped profile:", error)
+        // Fallback to default featured artist if API fails
+        setFeaturedArtist({
+          name: "SYNTHWAVE_92",
+          image: "/placeholder.svg",
+          riffTips: 24350,
+          topRiff: "Neon Cascade",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
 
-  // Top Rifflord NFT data (would come from API in real implementation)
-  const topRiffNFT: RiffNFT = {
-    name: "Quantum Pulse",
-    artist: "CyberSoul",
-    image: "/nft.png?key=mtoad",
-    waveform: "/wave-pattern.png",
-    stakedAmount: 156000,
-  }
+    fetchMostTippedProfile()
+  }, [])
+
+  // Fetch riff based on playback mode
+  useEffect(() => {
+    async function fetchRiff() {
+      setIsRiffLoading(true)
+      try {
+        const response = await (playbackMode === "newest" 
+          ? nftApi.getLatestRiff() 
+          : nftApi.getRandomRiff())
+        setTopRiffNFT(response)
+      } catch (error) {
+        console.error(`Error fetching ${playbackMode} riff:`, error)
+        setTopRiffNFT({
+          name: "Quantum Pulse",
+          artist: "CyberSoul",
+          image: "/nft.png",
+          waveform: "/wave-pattern.png",
+          stakedAmount: 156000,
+        })
+      } finally {
+        setIsRiffLoading(false)
+      }
+    }
+
+    fetchRiff()
+  }, [playbackMode])
 
   // Simulate playback
   useEffect(() => {
@@ -131,8 +167,8 @@ export default function StudioHero() {
                 <div className="relative w-full h-full rounded-lg overflow-hidden">
                   {/* Artist image */}
                   <Image
-                    src={featuredArtist.image || "/placeholder.svg"}
-                    alt={featuredArtist.name}
+                    src={featuredArtist?.image || "/placeholder.svg"}
+                    alt={featuredArtist?.name || "Featured Artist"}
                     fill
                     className="object-cover"
                   />
@@ -141,12 +177,12 @@ export default function StudioHero() {
                   <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 via-black/60 to-transparent">
                     <div className="flex justify-between items-end">
                       <div>
-                        <h3 className="text-2xl font-bold">{featuredArtist.name}</h3>
-                        <p className="text-violet-300">{featuredArtist.topRiff}</p>
+                        <h3 className="text-2xl font-bold">{featuredArtist?.name || "Loading..."}</h3>
+                        <p className="text-violet-300">{featuredArtist?.topRiff || "Loading..."}</p>
                       </div>
                       <div className="bg-violet-500/20 backdrop-blur-sm px-3 py-1 rounded-full">
                         <span className="text-violet-300 font-medium">
-                          {featuredArtist.riffTips.toLocaleString()} RIFF
+                          {featuredArtist?.riffTips.toLocaleString() || "0"} RIFF
                         </span>
                       </div>
                     </div>
@@ -170,15 +206,13 @@ export default function StudioHero() {
                   <div className="flex items-center bg-zinc-800/80 rounded-full p-0.5">
                     <button
                       onClick={() => setPlaybackMode("newest")}
-                      className={`px-2 py-0.5 text-xs rounded-full transition-all ${playbackMode === "newest" ? "bg-blue-500/30 text-blue-300" : "text-zinc-400 hover:text-zinc-300"
-                        }`}
+                      className={`px-2 py-0.5 text-xs rounded-full transition-all ${playbackMode === "newest" ? "bg-blue-500/30 text-blue-300" : "text-zinc-400 hover:text-zinc-300"}`}
                     >
                       Newest
                     </button>
                     <button
                       onClick={() => setPlaybackMode("random")}
-                      className={`px-2 py-0.5 text-xs rounded-full transition-all ${playbackMode === "random" ? "bg-indigo-500/30 text-red-300" : "text-zinc-400 hover:text-zinc-300"
-                        }`}
+                      className={`px-2 py-0.5 text-xs rounded-full transition-all ${playbackMode === "random" ? "bg-indigo-500/30 text-red-300" : "text-zinc-400 hover:text-zinc-300"}`}
                     >
                       Random
                     </button>
@@ -192,8 +226,8 @@ export default function StudioHero() {
                 <div className="relative w-full h-full rounded-lg overflow-hidden bg-black">
                   {/* NFT background */}
                   <Image
-                    src={topRiffNFT.image || "/placeholder.svg"}
-                    alt={topRiffNFT.name}
+                    src={topRiffNFT?.image || "/placeholder.svg"}
+                    alt={topRiffNFT?.name || "Riff NFT"}
                     fill
                     className="object-cover opacity-60"
                   />
@@ -214,14 +248,14 @@ export default function StudioHero() {
                         }}
                       >
                         <Image
-                          src="/wave-pattern.png"
+                          src={"/wave-pattern.png"}
                           alt="Audio waveform"
                           width={1000}
                           height={300}
                           className="object-contain"
                         />
                         <Image
-                          src="/wave-pattern.png"
+                          src={"/wave-pattern.png"}
                           alt="Audio waveform"
                           width={1000}
                           height={300}
@@ -235,9 +269,9 @@ export default function StudioHero() {
                   <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 via-black/60 to-transparent">
                     <div className="flex justify-between items-end">
                       <div>
-                        <h3 className="text-2xl font-bold">{topRiffNFT.name}</h3>
+                        <h3 className="text-2xl font-bold">{topRiffNFT?.name || "Loading..."}</h3>
                         <div className="flex items-center gap-2">
-                          <p className="text-blue-300">by {topRiffNFT.artist}</p>
+                          <p className="text-blue-300">by {topRiffNFT?.artist || "Loading..."}</p>
                           <span className="text-xs text-zinc-500">
                             {playbackMode === "newest" ? "• Latest Upload" : "• Random Selection"}
                           </span>
@@ -245,7 +279,7 @@ export default function StudioHero() {
                       </div>
                       <div className="bg-blue-500/20 backdrop-blur-sm px-3 py-1 rounded-full">
                         <span className="text-blue-300 font-medium">
-                          {topRiffNFT.stakedAmount.toLocaleString()} RIFF
+                          {topRiffNFT?.stakedAmount.toLocaleString() || "0"} RIFF
                         </span>
                       </div>
                     </div>
