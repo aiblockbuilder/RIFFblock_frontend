@@ -60,8 +60,27 @@ export const authApi = {
 export const userApi = {
     getUserProfile: (walletAddress: string) => apiClient(`/users/profile/${walletAddress}`),
 
+    createProfile: (profileData: { walletAddress: string } & Partial<UpdateProfileData>) =>
+        apiClient("/users/profile", { method: "POST", body: profileData }),
+
     updateProfile: (walletAddress: string, profileData: UpdateProfileData) =>
         apiClient(`/users/profile/${walletAddress}`, { method: "PUT", body: profileData, walletAddress }),
+
+    uploadAvatar: (formData: FormData) =>
+        apiClient("/users/upload-avatar", { 
+            method: "POST", 
+            body: formData,
+            // Don't set Content-Type header - browser will set it automatically with boundary
+            headers: {}
+        }),
+
+    uploadCover: (formData: FormData) =>
+        apiClient("/users/upload-cover", { 
+            method: "POST", 
+            body: formData,
+            // Don't set Content-Type header - browser will set it automatically with boundary
+            headers: {}
+        }),
 
     getUserRiffs: (walletAddress: string, page = 0, limit = 10) =>
         apiClient(`/users/profile/${walletAddress}/riffs?page=${page}&limit=${limit}`),

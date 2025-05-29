@@ -1,7 +1,7 @@
 export interface SocialLinks {
-    twitterUrl?: string;
-    instagramUrl?: string;
-    websiteUrl?: string;
+    twitter?: string;
+    instagram?: string;
+    website?: string;
 }
 
 export interface UserStats {
@@ -135,9 +135,9 @@ export interface UpdateProfileData {
     name?: string;
     bio?: string;
     location?: string;
-    twitterUrl?: string;
-    instagramUrl?: string;
-    websiteUrl?: string;
+    twitter?: string;
+    instagram?: string;
+    website?: string;
     genres?: string[];
     influences?: string[];
 }
