@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { useWallet } from "@/contexts/wallet-context"
 // import { useAuth } from "@/hooks/use-auth"
 import { userApi } from "@/lib/api-client"
@@ -20,6 +21,7 @@ import WalletConnect from "@/components/wallet-connect"
 import { UpdateProfileData, UserProfile } from "@/types/api-response"
 
 export default function ProfilePage() {
+    const router = useRouter()
     const { isConnected, walletAddress } = useWallet()
     // const { userData, getCurrentUser } = useAuth()
     const [isEditing, setIsEditing] = useState(false)
@@ -30,7 +32,7 @@ export default function ProfilePage() {
     // Fetch user profile data
     useEffect(() => {
         async function fetchProfileData() {
-            if (!isConnected || !walletAddress) {
+            if (!walletAddress) {
                 setIsLoading(false)
                 return
             }
@@ -57,7 +59,7 @@ export default function ProfilePage() {
         }
 
         fetchProfileData()
-    }, [isConnected, walletAddress])
+    }, [walletAddress])
 
     // Check if the profile belongs to the connected wallet
     const isOwner = true // isConnected && walletAddress.toLowerCase() === (profile?.walletAddress || "").toLowerCase()
@@ -69,18 +71,6 @@ export default function ProfilePage() {
             const response = await userApi.getUserProfile(walletAddress)
             setProfile(response)
         }
-    }
-
-    if (isLoading) {
-        return (
-            <MainLayout>
-                <CreativeGradientBackground variant="profile">
-                    <div className="min-h-screen flex items-center justify-center">
-                        <div className="animate-spin rounded-full h-12 w-12 border-4 border-violet-500 border-t-transparent"></div>
-                    </div>
-                </CreativeGradientBackground>
-            </MainLayout>
-        )
     }
 
     if (!isConnected) {
@@ -95,6 +85,18 @@ export default function ProfilePage() {
                             </p>
                             <WalletConnect />
                         </div>
+                    </div>
+                </CreativeGradientBackground>
+            </MainLayout>
+        )
+    }
+
+    if (isLoading) {
+        return (
+            <MainLayout>
+                <CreativeGradientBackground variant="profile">
+                    <div className="min-h-screen flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-4 border-violet-500 border-t-transparent"></div>
                     </div>
                 </CreativeGradientBackground>
             </MainLayout>

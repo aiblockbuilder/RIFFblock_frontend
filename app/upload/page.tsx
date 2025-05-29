@@ -76,6 +76,7 @@ export default function UploadPage() {
     const [isBargainBin, setIsBargainBin] = useState(false)
     const [collection, setCollection] = useState("new")
     const [newCollectionName, setNewCollectionName] = useState("")
+    const [newCollectionDescription, setNewCollectionDescription] = useState("")
 
     // Monetization state
     const [price, setPrice] = useState("")
@@ -403,7 +404,7 @@ export default function UploadPage() {
                 formData.append("keySignature", keySignature)
                 formData.append("timeSignature", timeSignature)
                 formData.append("isBargainBin", String(isBargainBin))
-                formData.append("price", price || "0") // Default to 0 if price is empty
+                formData.append("price", price || "0")
                 formData.append("currency", currency)
                 formData.append("royaltyPercentage", String(royaltyPercentage))
                 formData.append("isStakable", String(enableStaking))
@@ -416,6 +417,7 @@ export default function UploadPage() {
 
                 if (collection === "new" && newCollectionName) {
                     formData.append("newCollectionName", newCollectionName)
+                    formData.append("newCollectionDescription", newCollectionDescription)
                 } else if (collection === "existing" && selectedCollectionId) {
                     formData.append("collectionId", selectedCollectionId)
                 }
@@ -427,7 +429,8 @@ export default function UploadPage() {
                     description: "Your riff has been uploaded successfully!",
                 })
                 
-                router.push(`/riff/${response.id}`)
+                // Redirect to profile page instead of riff page
+                router.push(`/profile/${walletAddress}`)
             } catch (error: any) {
                 console.error("Upload error:", error)
                 
@@ -808,12 +811,18 @@ export default function UploadPage() {
                                     </div>
 
                                     {collection === "new" && (
-                                        <div className="mt-3">
+                                        <div className="mt-3 space-y-3">
                                             <Input
                                                 placeholder="Collection name"
                                                 value={newCollectionName}
                                                 onChange={(e) => setNewCollectionName(e.target.value)}
                                                 className="bg-zinc-900/50 border-zinc-800"
+                                            />
+                                            <Textarea
+                                                placeholder="Collection description (optional)"
+                                                value={newCollectionDescription}
+                                                onChange={(e) => setNewCollectionDescription(e.target.value)}
+                                                className="bg-zinc-900/50 border-zinc-800 min-h-[80px]"
                                             />
                                         </div>
                                     )}
