@@ -1,12 +1,14 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { FileAudio } from "lucide-react"
 
 interface WaveformVisualizerProps {
     audioUrl: string
     height?: number
     color?: string
     backgroundColor?: string
+    isPlaying?: boolean
 }
 
 export default function WaveformVisualizer({
@@ -14,215 +16,344 @@ export default function WaveformVisualizer({
     height = 80,
     color = "#8b5cf6",
     backgroundColor = "#27272a",
+    isPlaying = false,
 }: WaveformVisualizerProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const audioRef = useRef<HTMLAudioElement | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [audioContext, setAudioContext] = useState<AudioContext | null>(null)
-    const [analyser, setAnalyser] = useState<AnalyserNode | null>(null)
+    const audioContextRef = useRef<AudioContext | null>(null)
+    const analyserRef = useRef<AnalyserNode | null>(null)
     const animationRef = useRef<number | null>(null)
+    const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null)
+    const [waveformBuffer, setWaveformBuffer] = useState<Float32Array | null>(null)
 
-    // Initialize audio context
+    // Initialize audio context and analyser
     useEffect(() => {
-        // Create audio context only on user interaction to comply with browser policies
-        const handleUserInteraction = () => {
-            if (!audioContext) {
-                try {
-                    const newAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
-                    const newAnalyser = newAudioContext.createAnalyser()
-                    newAnalyser.fftSize = 256
+        let isMounted = true;
+        
+        const initializeAudioContext = async () => {
+            try {
+                if (!audioContextRef.current) {
+                    const newAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+                    const newAnalyser = newAudioContext.createAnalyser();
+                    newAnalyser.fftSize = 2048;
+                    newAnalyser.smoothingTimeConstant = 0.1;
 
-                    setAudioContext(newAudioContext)
-                    setAnalyser(newAnalyser)
-                } catch (err) {
-                    console.error("Failed to create audio context:", err)
-                    setError("Your browser doesn't support audio visualization")
+                    if (isMounted) {
+                        audioContextRef.current = newAudioContext;
+                        analyserRef.current = newAnalyser;
+                    } else {
+                        // Clean up if component unmounted during initialization
+                        newAudioContext.close();
+                    }
+                }
+
+                // Resume context on user interaction
+                const resumeContext = async () => {
+                    if (audioContextRef.current?.state === 'suspended') {
+                        try {
+                            await audioContextRef.current.resume();
+                        } catch (e) {
+                            console.error("Failed to resume AudioContext:", e);
+                        }
+                    }
+                    window.removeEventListener('click', resumeContext);
+                    window.removeEventListener('touchstart', resumeContext);
+                };
+
+                window.addEventListener('click', resumeContext);
+                window.addEventListener('touchstart', resumeContext);
+
+            } catch (err) {
+                console.error("Failed to create audio context:", err);
+                if (isMounted) {
+                    setError("Your browser doesn't support audio visualization");
                 }
             }
-        }
+        };
 
-        // Add event listeners for user interaction
-        window.addEventListener("click", handleUserInteraction)
-        window.addEventListener("touchstart", handleUserInteraction)
+        initializeAudioContext();
 
         return () => {
-            window.removeEventListener("click", handleUserInteraction)
-            window.removeEventListener("touchstart", handleUserInteraction)
-
-            // Clean up animation and audio context
+            isMounted = false;
+            
+            // Clean up animation
             if (animationRef.current) {
-                cancelAnimationFrame(animationRef.current)
+                cancelAnimationFrame(animationRef.current);
+                animationRef.current = null;
             }
 
-            if (audioContext) {
-                audioContext.close()
+            // Clean up audio context
+            if (audioContextRef.current) {
+                audioContextRef.current.close().catch(e => console.error("Failed to close AudioContext:", e));
+                audioContextRef.current = null;
             }
-        }
-    }, [audioContext])
 
-    // Set up audio and visualization when URL changes
+            // Clean up analyser
+            analyserRef.current = null;
+        };
+    }, []); // Empty dependency array to run only on mount/unmount
+
+    // Fetch, decode, and process audio for static waveform
     useEffect(() => {
-        if (!audioUrl || !audioContext || !analyser) return
+        let isMounted = true;
+        
+        const processAudio = async () => {
+            if (!audioUrl || !audioContextRef.current || !isMounted) {
+                setWaveformBuffer(null);
+                setIsLoading(false);
+                return;
+            }
 
-        setIsLoading(true)
-        setError(null)
+            setIsLoading(true);
+            setError(null);
+            setWaveformBuffer(null);
 
-        // Clean up previous animation
-        if (animationRef.current) {
-            cancelAnimationFrame(animationRef.current)
-            animationRef.current = null
-        }
-
-        // Create new audio element
-        const audio = new Audio()
-        audio.crossOrigin = "anonymous"
-        audioRef.current = audio
-
-        // Set up audio source and connect to analyser
-        const setupAudio = () => {
             try {
-                if (!audioContext || !analyser) return
+                // Clean up previous sources/animations
+                if (animationRef.current) {
+                    cancelAnimationFrame(animationRef.current);
+                    animationRef.current = null;
+                }
+                if (sourceNodeRef.current) {
+                    sourceNodeRef.current.disconnect();
+                    sourceNodeRef.current = null;
+                }
+                if (audioRef.current) {
+                    audioRef.current.pause();
+                    audioRef.current.src = '';
+                }
 
-                const source = audioContext.createMediaElementSource(audio)
-                source.connect(analyser)
-                analyser.connect(audioContext.destination)
+                // Fetch audio file
+                const response = await fetch(audioUrl);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const arrayBuffer = await response.arrayBuffer();
 
-                setIsLoading(false)
-                drawWaveform()
+                // Decode audio data
+                const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
+
+                if (!isMounted) return; // Check if still mounted
+
+                // Process buffer to get waveform data
+                const rawData = audioBuffer.getChannelData(0);
+                const samples = 128;
+                const blockSize = Math.floor(rawData.length / samples);
+                const filteredData = new Float32Array(samples);
+
+                for (let i = 0; i < samples; i++) {
+                    let sum = 0;
+                    const start = i * blockSize;
+                    for (let j = 0; j < blockSize; j++) {
+                        sum += Math.abs(rawData[start + j]);
+                    }
+                    filteredData[i] = sum / blockSize;
+                }
+
+                if (isMounted) {
+                    setWaveformBuffer(filteredData);
+                    setIsLoading(false);
+                }
+
             } catch (err) {
-                console.error("Error setting up audio:", err)
-                setError("Failed to process audio")
-                setIsLoading(false)
+                console.error("Error processing audio file:", err);
+                if (isMounted) {
+                    setError("Failed to load or process audio file.");
+                    setIsLoading(false);
+                }
             }
-        }
+        };
 
-        // Handle audio load events
-        audio.onloadeddata = setupAudio
+        processAudio();
 
-        audio.onerror = () => {
-            console.error("Error loading audio:", audio.error)
-            setError("Failed to load audio")
-            setIsLoading(false)
-        }
+        return () => {
+            isMounted = false;
+        };
+    }, [audioUrl]);
 
-        // Load the audio file
-        audio.src = audioUrl
+    // Draw the waveform (static or dynamic)
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext("2d");
+        const analyser = analyserRef.current;
+        const audioContext = audioContextRef.current;
 
-        // Draw waveform function
-        const drawWaveform = () => {
-            if (!canvasRef.current || !analyser) return
+        if (!canvas || !ctx || !audioContext) return;
 
-            const canvas = canvasRef.current
-            const ctx = canvas.getContext("2d")
-            if (!ctx) return
+        // Set canvas dimensions with device pixel ratio for sharp rendering
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = canvas.clientWidth * dpr;
+        canvas.height = height * dpr;
+        ctx.scale(dpr, dpr);
 
-            // Set canvas dimensions with device pixel ratio for sharp rendering
-            const dpr = window.devicePixelRatio || 1
-            canvas.width = canvas.clientWidth * dpr
-            canvas.height = height * dpr
+        // Function to draw static waveform from buffer
+        const drawStaticWaveform = (buffer: Float32Array) => {
+            ctx.fillStyle = backgroundColor;
+            ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
 
-            // Scale context according to device pixel ratio
-            ctx.scale(dpr, dpr)
+            const barCount = buffer.length;
+            const barWidth = canvas.clientWidth / barCount;
+            const barSpacing = 1; // Adjust spacing as needed
+            const scaleFactor = height / 2; // Scale to canvas height
 
-            // Get frequency data
-            const bufferLength = analyser.frequencyBinCount
-            const dataArray = new Uint8Array(bufferLength)
-            analyser.getByteFrequencyData(dataArray)
-
-            // Clear canvas
-            ctx.fillStyle = backgroundColor
-            ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight)
-
-            // Calculate bar width and spacing
-            const barCount = bufferLength / 2
-            const barWidth = canvas.clientWidth / barCount
-            const barSpacing = 1
-            const scaleFactor = 0.8 // Scale factor to make bars not too tall
-
-            // Draw bars
-            ctx.fillStyle = color
+            ctx.fillStyle = color;
 
             for (let i = 0; i < barCount; i++) {
-                const barHeight = (dataArray[i] / 255) * canvas.clientHeight * scaleFactor
-                const x = i * (barWidth + barSpacing)
-                const y = (canvas.clientHeight - barHeight) / 2
+                const barHeight = buffer[i] * scaleFactor;
+                const x = i * barWidth;
+                const y = (canvas.clientHeight / dpr - barHeight) / 2;
 
-                // Draw rounded bars
-                ctx.beginPath()
-                ctx.roundRect(x, y, barWidth, barHeight, [2])
-                ctx.fill()
+                ctx.beginPath();
+                // Draw simple rectangles for now
+                ctx.rect(x, y, barWidth - barSpacing, barHeight);
+                ctx.fill();
+            }
+        };
+
+        // Function to draw dynamic waveform from analyser
+        const drawDynamicWaveform = () => {
+            if (!analyser || !ctx) return;
+
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+
+            // Get time domain data for waveform visualizer
+            analyser.getByteTimeDomainData(dataArray);
+
+            ctx.fillStyle = backgroundColor;
+            ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+
+            const sliceWidth = canvas.clientWidth * 1.0 / bufferLength;
+            let x = 0;
+
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = color;
+
+            ctx.beginPath();
+
+            for(let i = 0; i < bufferLength; i++) {
+                const v = dataArray[i] / 128.0;
+                const y = v * canvas.clientHeight / 2;
+
+                if(i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+
+                x += sliceWidth;
             }
 
-            // Continue animation
-            animationRef.current = requestAnimationFrame(drawWaveform)
+            // Draw a line to the end of the canvas
+            ctx.lineTo(canvas.clientWidth, canvas.clientHeight/2);
+            ctx.stroke();
+
+            animationRef.current = requestAnimationFrame(drawDynamicWaveform);
+        };
+
+        // --- Drawing Logic ---
+
+        // Stop any existing animation frame
+        if (animationRef.current) {
+            cancelAnimationFrame(animationRef.current);
+            animationRef.current = null;
         }
 
-        // Clean up function
+        if (isLoading || error) {
+            // Clear canvas if loading or error
+            ctx.fillStyle = backgroundColor;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            return;
+        }
+
+        if (isPlaying && analyser) {
+            // Connect audio element to analyser if not already connected
+            // Note: This assumes the audio element exists and is managed elsewhere
+            // A more robust solution would manage the audio element within this component
+            // or receive it as a prop.
+            // For simplicity, we'll just start the animation loop.
+            drawDynamicWaveform();
+        } else if (waveformBuffer) {
+            // Draw static waveform from buffer if available and not playing
+            drawStaticWaveform(waveformBuffer);
+        } else {
+            // Draw empty/default state if no buffer and not playing
+            ctx.fillStyle = backgroundColor;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // Optionally draw a placeholder or message
+        }
+
         return () => {
             if (animationRef.current) {
-                cancelAnimationFrame(animationRef.current)
+                cancelAnimationFrame(animationRef.current);
             }
+            // Disconnect source if it was connected here
+            if (sourceNodeRef.current) {
+                sourceNodeRef.current.disconnect();
+                sourceNodeRef.current = null;
+            }
+        };
 
-            audio.pause()
-            audio.src = ""
-        }
-    }, [audioUrl, audioContext, analyser, height, color, backgroundColor])
+    }, [isPlaying, waveformBuffer, isLoading, error, height, color, backgroundColor]); // Add isPlaying and waveformBuffer to dependencies
 
-    // Draw static visualization when no audio is playing
+    // Effect to connect audio element to analyser when isPlaying changes
     useEffect(() => {
-        if (!canvasRef.current || isLoading || error) return
+        const audioContext = audioContextRef.current;
+        const analyser = analyserRef.current;
+        const audio = audioRef.current; // Assumes audioRef is updated by the parent component or elsewhere
 
-        // If we don't have audio playing, draw a static visualization
-        if (!audioUrl || !audioContext || !analyser) {
-            const canvas = canvasRef.current
-            const ctx = canvas.getContext("2d")
-            if (!ctx) return
-
-            // Set canvas dimensions
-            const dpr = window.devicePixelRatio || 1
-            canvas.width = canvas.clientWidth * dpr
-            canvas.height = height * dpr
-            ctx.scale(dpr, dpr)
-
-            // Clear canvas
-            ctx.fillStyle = backgroundColor
-            ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight)
-
-            // Draw static bars
-            ctx.fillStyle = color
-            const barCount = 32
-            const barWidth = canvas.clientWidth / barCount
-            const barSpacing = 1
-
-            for (let i = 0; i < barCount; i++) {
-                // Generate random heights for static visualization
-                const barHeight = Math.random() * (canvas.clientHeight * 0.6) + canvas.clientHeight * 0.1
-                const x = i * (barWidth + barSpacing)
-                const y = (canvas.clientHeight - barHeight) / 2
-
-                ctx.beginPath()
-                ctx.roundRect(x, y, barWidth, barHeight, [2])
-                ctx.fill()
+        if (!audioContext || !analyser || !audio) {
+            if (sourceNodeRef.current) {
+                sourceNodeRef.current.disconnect();
+                sourceNodeRef.current = null;
             }
+            return;
         }
-    }, [audioUrl, audioContext, analyser, isLoading, error, height, color, backgroundColor])
+
+        if (isPlaying && !sourceNodeRef.current) {
+            try {
+                const source = audioContext.createMediaElementSource(audio);
+                source.connect(analyser);
+                // Connect to destination only if the audio element itself isn't already connected
+                // This avoids double playback if the audio element is already in the DOM and playing.
+                // analyser.connect(audioContext.destination);
+                sourceNodeRef.current = source;
+                console.log("Audio element connected to analyser");
+
+            } catch (e) {
+                console.error("Error connecting audio element to analyser:", e);
+                setError("Could not connect audio for visualization.");
+            }
+        } else if (!isPlaying && sourceNodeRef.current) {
+            sourceNodeRef.current.disconnect();
+            sourceNodeRef.current = null;
+            console.log("Audio element disconnected from analyser");
+        }
+
+    }, [isPlaying, audioUrl]); // Depend on isPlaying and audioUrl
 
     return (
         <div className="w-full relative">
             {isLoading && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-violet-500 border-t-transparent"></div>
+                <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/80 rounded-md">
+                    <div className="animate-spin rounded-full h-8 w-8 border-4 border-violet-500 border-t-transparent"></div>
                 </div>
             )}
 
             {error && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-red-500 text-sm">{error}</div>
+                <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/80 rounded-md">
+                    <div className="text-red-500 text-sm text-center">{error}</div>
                 </div>
             )}
 
-            <canvas ref={canvasRef} className="w-full rounded-md" style={{ height: `${height}px` }} />
+            {/* Static placeholder if no audioUrl and not loading/error */}
+            {!audioUrl && !isLoading && !error && (
+                <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/80 rounded-md">
+                    <FileAudio className="h-12 w-12 text-zinc-600" />
+                </div>
+            )}
+
+            <canvas ref={canvasRef} className={`w-full rounded-md ${isLoading || error || !audioUrl ? 'opacity-0' : 'opacity-100'}`} style={{ height: `${height}px` }} />
         </div>
     )
 }

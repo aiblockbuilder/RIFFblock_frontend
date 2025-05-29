@@ -6,9 +6,6 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/a
 
 const axiosInstance = axios.create({
     baseURL: API_BASE_URL,
-    headers: {
-        "Content-Type": "application/json",
-    },
 })
 
 interface ApiClientOptions {
@@ -21,13 +18,15 @@ interface ApiClientOptions {
 export async function apiClient(endpoint: string, options: ApiClientOptions = {}) {
     const { walletAddress, body, method = "GET", headers = {} } = options
 
+    // Set default Content-Type to application/json unless it's FormData
+    const contentType = body instanceof FormData ? undefined : "application/json"
+
     const config = {
         url: endpoint,
         method,
         headers: {
             ...headers,
-            "Content-Type": "application/json",
-            // ...(walletAddress ? { "x-wallet-address": walletAddress } : {}),
+            ...(contentType ? { "Content-Type": contentType } : {}),
         },
         ...(body ? { data: body } : {}),
     }
@@ -64,6 +63,9 @@ export const userApi = {
     updateProfile: (walletAddress: string, profileData: UpdateProfileData) =>
         apiClient(`/users/profile/${walletAddress}`, { method: "PUT", body: profileData, walletAddress }),
 
+    getUserRiffs: (walletAddress: string, page = 0, limit = 10) =>
+        apiClient(`/users/profile/${walletAddress}/riffs?page=${page}&limit=${limit}`),
+
     getUserNFTs: (walletAddress: string, page = 0, limit = 10, type = "created") =>
         apiClient(`/users/profile/${walletAddress}/nfts?page=${page}&limit=${limit}&type=${type}`),
 
@@ -77,7 +79,6 @@ export const userApi = {
         apiClient(`/users/profile/${walletAddress}/activity?page=${page}&limit=${limit}`),
 
     getUserTippingTiers: (walletAddress: string) => apiClient(`/tipping/tiers/${walletAddress}`),
-
 
     getUserFavorites: (walletAddress: string, page = 0, limit = 10) =>
         apiClient(`/users/profile/${walletAddress}/favorites?page=${page}&limit=${limit}`),
@@ -112,8 +113,14 @@ export const userApi = {
 
 // NFT API
 export const nftApi = {
-    createRiff: (walletAddress: string, nftData: any) =>
-        apiClient("/riffs", { method: "POST", body: nftData, walletAddress }),
+    createRiff: (walletAddress: string, formData: FormData) =>
+        apiClient("/riffs/upload", { 
+            method: "POST", 
+            body: formData, 
+            walletAddress,
+            // Don't set Content-Type header - browser will set it automatically with boundary
+            headers: {}
+        }),
 
     getRiff: (id: string, walletAddress: string) => apiClient(`/riffs/riff/${id}`, { walletAddress }),
     getLatestRiff: () => apiClient(`/riffs/latest`),
@@ -134,6 +141,9 @@ export const marketplaceApi = {
 export const collectionApi = {
     createCollection: (walletAddress: string, collectionData: any) =>
         apiClient("/collections", { method: "POST", body: collectionData, walletAddress }),
+
+    getAllCollections: (walletAddress: string) =>
+        apiClient(`/collections?walletAddress=${walletAddress}`),
 
     // Add other collection-related API calls
 }

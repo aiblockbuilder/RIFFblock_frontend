@@ -172,7 +172,7 @@ export default function CreativeGradientBackground({ children, variant = "about"
             <div
                 className="absolute inset-0 z-0 pointer-events-none opacity-20"
                 style={{
-                    backgroundImage: "url('/noise-texture.png')",
+                    backgroundImage: "url('/noise-texture.jpg')",
                     backgroundRepeat: "repeat",
                     mixBlendMode: "overlay",
                 }}
