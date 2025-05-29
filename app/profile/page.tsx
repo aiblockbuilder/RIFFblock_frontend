@@ -115,34 +115,31 @@ export default function ProfilePage() {
                             </p>
                             <Button
                                 className="bg-violet-600 hover:bg-violet-700"
-                                onClick={() => {
-                                    // Create a new profile
-                                    setIsEditing(true)
-                                    setProfile({
-                                        id: "",
-                                        walletAddress: walletAddress,
-                                        name: `user_${walletAddress.substring(2, 8)}`,
-                                        bio: "sample bio",
-                                        location: "sample loaction",
-                                        avatar: "/sample-avatar",
-                                        coverImage: "/sample-cover-image",
-                                        ensName: "sample-ens-name",
-                                        socialLinks: {
-                                            twitterUrl: "",
-                                            instagramUrl: "",
-                                            websiteUrl: "",
-                                        },
-                                        genres: [""],
-                                        influences: [""],
-                                        stats: {
-                                            totalRiffs: 0,
-                                            totalTips: 0,
-                                            totalStaked: 0,
-                                            followers: 0,
-                                        },
-                                        createdAt: new Date(),
-                                        updatedAt: new Date(),
-                                    })
+                                onClick={async () => {
+                                    try {
+                                        // Create a new profile
+                                        const newProfile = await userApi.createProfile({
+                                            walletAddress,
+                                            name: `user_${walletAddress.substring(2, 8)}`,
+                                            bio: "Welcome to my profile!",
+                                            location: "",
+                                            genres: [],
+                                            influences: [],
+                                        })
+                                        setProfile(newProfile)
+                                        setIsEditing(true)
+                                        toast({
+                                            title: "Profile Created",
+                                            description: "Your profile has been created successfully.",
+                                        })
+                                    } catch (error) {
+                                        console.error("Error creating profile:", error)
+                                        toast({
+                                            variant: "destructive",
+                                            title: "Error",
+                                            description: "Failed to create profile. Please try again.",
+                                        })
+                                    }
                                 }}
                             >
                                 Create Profile
