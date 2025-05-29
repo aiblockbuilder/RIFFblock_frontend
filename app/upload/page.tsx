@@ -36,6 +36,7 @@ import MainLayout from "@/components/layouts/main-layout"
 import WaveformVisualizer from "@/components/upload/waveform-visualizer"
 import WalletConnect from "@/components/wallet-connect"
 import CreativeGradientBackground from "@/components/creative-gradient-background"
+import { nftApi, collectionApi } from "@/lib/api-client"
 
 // Define the steps in the upload process
 const STEPS = {
@@ -48,12 +49,13 @@ const STEPS = {
 
 export default function UploadPage() {
     const router = useRouter()
-    const { isConnected } = useWallet()
+    const { isConnected, walletAddress } = useWallet()
     const [currentStep, setCurrentStep] = useState(STEPS.FILE_UPLOAD)
     const [isUploading, setIsUploading] = useState(false)
     const [isMinting, setIsMinting] = useState(false)
     const [isPlaying, setIsPlaying] = useState(false)
     const [uploadType, setUploadType] = useState<"just-upload" | "mint-nft">("just-upload")
+    const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null)
 
     // File upload state
     const [file, setFile] = useState<File | null>(null)
@@ -78,8 +80,8 @@ export default function UploadPage() {
     // Monetization state
     const [price, setPrice] = useState("")
     const [currency, setCurrency] = useState("RIFF")
-    const [royaltyPercentage, setRoyaltyPercentage] = useState(10)
-    const [enableStaking, setEnableStaking] = useState(true)
+    const [royaltyPercentage, setRoyaltyPercentage] = useState<number>(0)
+    const [enableStaking, setEnableStaking] = useState(false)
 
     // Unlockables state
     const [unlockSourceFiles, setUnlockSourceFiles] = useState(false)
@@ -96,6 +98,10 @@ export default function UploadPage() {
     const fileInputRef = useRef<HTMLInputElement | null>(null)
     const imageInputRef = useRef<HTMLInputElement | null>(null)
 
+    // Collections state
+    const [collections, setCollections] = useState<any[]>([])
+    const [isLoadingCollections, setIsLoadingCollections] = useState(false)
+
     // Check if user is connected to wallet
     useEffect(() => {
         if (!isConnected) {
@@ -106,6 +112,30 @@ export default function UploadPage() {
             })
         }
     }, [isConnected])
+
+    // Fetch collections when user selects "Add to Existing Collection"
+    useEffect(() => {
+        const fetchCollections = async () => {
+            if (collection === "existing" && walletAddress) {
+                setIsLoadingCollections(true)
+                try {
+                    const response = await collectionApi.getAllCollections(walletAddress)
+                    setCollections(response)
+                } catch (error) {
+                    console.error("Error fetching collections:", error)
+                    toast({
+                        title: "Error",
+                        description: "Failed to fetch collections. Please try again.",
+                        variant: "destructive",
+                    })
+                } finally {
+                    setIsLoadingCollections(false)
+                }
+            }
+        }
+
+        fetchCollections()
+    }, [collection, walletAddress])
 
     // Handle file upload
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -125,8 +155,12 @@ export default function UploadPage() {
 
     // Process audio file
     const processAudioFile = (selectedFile: File) => {
-        // Check file type
-        if (!selectedFile.type.includes("audio/")) {
+        // Check file type and extension
+        const allowedTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav'];
+        const allowedExtensions = ['.mp3', '.wav'];
+        const fileExtension = selectedFile.name.toLowerCase().slice(selectedFile.name.lastIndexOf('.'));
+        
+        if (!allowedTypes.includes(selectedFile.type) || !allowedExtensions.includes(fileExtension)) {
             toast({
                 title: "Invalid File Type",
                 description: "Please upload an MP3 or WAV file.",
@@ -136,10 +170,11 @@ export default function UploadPage() {
         }
 
         // Check file size (25MB max)
-        if (selectedFile.size > 25 * 1024 * 1024) {
+        const maxSize = 25 * 1024 * 1024; // 25MB in bytes
+        if (selectedFile.size > maxSize) {
             toast({
                 title: "File Too Large",
-                description: "Maximum file size is 25MB.",
+                description: `Maximum file size is ${maxSize / (1024 * 1024)}MB.`,
                 variant: "destructive",
             })
             return
@@ -163,7 +198,6 @@ export default function UploadPage() {
             }
 
             setFile(selectedFile)
-            setFilePreview(URL.createObjectURL(selectedFile))
             setFilePreview(objectUrl)
             setFileDuration(audio.duration)
             audioRef.current = audio
@@ -346,46 +380,80 @@ export default function UploadPage() {
         }
     }
 
-    // Handle upload/mint submission
+    // Handle submit with retry mechanism
     const handleSubmit = async () => {
-        if (!isConnected) {
-            toast({
-                title: "Wallet Connection Required",
-                description: "Please connect your wallet to upload riffs.",
-                variant: "destructive",
-            })
-            return
-        }
+        if (!file || !walletAddress) return
 
-        if (uploadType === "just-upload") {
-            setIsUploading(true)
+        setIsUploading(true)
+        let retryCount = 0
+        const maxRetries = 3
 
-            // Simulate upload process
-            setTimeout(() => {
-                setIsUploading(false)
+        const uploadWithRetry = async () => {
+            try {
+                const formData = new FormData()
+                formData.append("audio", file)
+                if (coverImage) {
+                    formData.append("cover", coverImage)
+                }
+                formData.append("title", title)
+                formData.append("description", description)
+                formData.append("genre", genre)
+                formData.append("mood", mood)
+                formData.append("instrument", instrument)
+                formData.append("keySignature", keySignature)
+                formData.append("timeSignature", timeSignature)
+                formData.append("isBargainBin", String(isBargainBin))
+                formData.append("price", price || "0") // Default to 0 if price is empty
+                formData.append("currency", currency)
+                formData.append("royaltyPercentage", String(royaltyPercentage))
+                formData.append("isStakable", String(enableStaking))
+                formData.append("stakingRoyaltyShare", String(customRoyaltyShare))
+                formData.append("unlockSourceFiles", String(unlockSourceFiles))
+                formData.append("unlockRemixRights", String(unlockRemixRights))
+                formData.append("unlockPrivateMessages", String(unlockPrivateMessages))
+                formData.append("unlockBackstageContent", String(unlockBackstageContent))
+                formData.append("walletAddress", walletAddress)
+
+                if (collection === "new" && newCollectionName) {
+                    formData.append("newCollectionName", newCollectionName)
+                } else if (collection === "existing" && selectedCollectionId) {
+                    formData.append("collectionId", selectedCollectionId)
+                }
+
+                const response = await nftApi.createRiff(walletAddress, formData)
+                
                 toast({
-                    title: "Upload Successful",
+                    title: "Success",
                     description: "Your riff has been uploaded successfully!",
                 })
-
-                // Redirect to profile page
-                router.push("/profile")
-            }, 2000)
-        } else {
-            setIsMinting(true)
-
-            // Simulate minting process
-            setTimeout(() => {
-                setIsMinting(false)
+                
+                router.push(`/riff/${response.id}`)
+            } catch (error: any) {
+                console.error("Upload error:", error)
+                
+                if (retryCount < maxRetries) {
+                    retryCount++
+                    const delay = Math.pow(2, retryCount) * 1000 // Exponential backoff
+                    toast({
+                        title: "Upload Failed",
+                        description: `Retrying upload (${retryCount}/${maxRetries})...`,
+                        variant: "destructive",
+                    })
+                    await new Promise(resolve => setTimeout(resolve, delay))
+                    return uploadWithRetry()
+                }
+                
                 toast({
-                    title: "Minting Successful",
-                    description: "Your riff has been minted as an NFT!",
+                    title: "Upload Failed",
+                    description: error.message || "Failed to upload riff. Please try again.",
+                    variant: "destructive",
                 })
-
-                // Redirect to profile page
-                router.push("/profile")
-            }, 3000)
+            } finally {
+                setIsUploading(false)
+            }
         }
+
+        await uploadWithRetry()
     }
 
     // Generate a random waveform if no cover image
@@ -727,7 +795,10 @@ export default function UploadPage() {
                                         ? "border-violet-500 bg-violet-500/10"
                                         : "border-zinc-800 bg-zinc-900/50 hover:border-zinc-700"
                                         }`}
-                                    onClick={() => setCollection("new")}
+                                    onClick={() => {
+                                        setCollection("new")
+                                        setSelectedCollectionId(null)
+                                    }}
                                 >
                                     <div className="flex items-center gap-3">
                                         <div className="w-5 h-5 rounded-full border-2 flex items-center justify-center">
@@ -764,16 +835,26 @@ export default function UploadPage() {
 
                                     {collection === "existing" && (
                                         <div className="mt-3">
-                                            <Select>
-                                                <SelectTrigger className="bg-zinc-900/50 border-zinc-800">
-                                                    <SelectValue placeholder="Select collection" />
-                                                </SelectTrigger>
-                                                <SelectContent className="bg-zinc-900 border-zinc-800">
-                                                    <SelectItem value="synthwave">Synthwave Sessions</SelectItem>
-                                                    <SelectItem value="guitar">Guitar Experiments</SelectItem>
-                                                    <SelectItem value="ambient">Ambient Textures</SelectItem>
-                                                </SelectContent>
-                                            </Select>
+                                            {isLoadingCollections ? (
+                                                <div className="flex items-center justify-center py-2">
+                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                </div>
+                                            ) : collections.length > 0 ? (
+                                                <Select value={selectedCollectionId || ""} onValueChange={setSelectedCollectionId}>
+                                                    <SelectTrigger className="bg-zinc-900/50 border-zinc-800">
+                                                        <SelectValue placeholder="Select collection" />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="bg-zinc-900 border-zinc-800">
+                                                        {collections.map((collection) => (
+                                                            <SelectItem key={collection.id} value={collection.id.toString()}>
+                                                                {collection.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            ) : (
+                                                <p className="text-sm text-zinc-500">No collections found</p>
+                                            )}
                                         </div>
                                     )}
                                 </div>

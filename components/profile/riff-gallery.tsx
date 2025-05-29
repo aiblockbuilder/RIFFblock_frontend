@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Image from "next/image"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Play, Pause, Heart, Share2, Plus, MoreHorizontal, Clock, Grid3x3, List } from "lucide-react"
@@ -23,32 +24,31 @@ interface RiffGalleryProps {
 }
 
 export default function RiffGallery({ isOwner, isEditing, walletAddress }: RiffGalleryProps) {
+    const router = useRouter()
     const [riffs, setRiffs] = useState<Riff[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
     const [sortBy, setSortBy] = useState("newest")
     const [playingRiff, setPlayingRiff] = useState<string | null>(null)
+    const [isLoadingRiffs, setIsLoadingRiffs] = useState(false)
 
     useEffect(() => {
-        async function fetchRiffs() {
-            if (!walletAddress) {
-                setIsLoading(false)
-                return
-            }
-
-            try {
-                const response = await userApi.getUserNFTs(walletAddress)
-                // console.log(">>> get user nft response : \n", response)
-                setRiffs(response || [])
-            } catch (error) {
-                console.error("Error fetching riffs:", error)
-                toast({
-                    variant: "destructive",
-                    title: "Error",
-                    description: "Failed to load riffs",
-                })
-            } finally {
-                setIsLoading(false)
+        const fetchRiffs = async () => {
+            if (walletAddress) {
+                setIsLoadingRiffs(true)
+                try {
+                    const response = await userApi.getUserRiffs(walletAddress)
+                    setRiffs(response)
+                } catch (error) {
+                    console.error("Error fetching riffs:", error)
+                    toast({
+                        title: "Error",
+                        description: "Failed to fetch riffs. Please try again.",
+                        variant: "destructive",
+                    })
+                } finally {
+                    setIsLoadingRiffs(false)
+                }
             }
         }
 
@@ -61,6 +61,10 @@ export default function RiffGallery({ isOwner, isEditing, walletAddress }: RiffG
         } else {
             setPlayingRiff(id)
         }
+    }
+
+    const handleUploadClick = () => {
+        router.push('/upload')
     }
 
     return (
@@ -94,7 +98,10 @@ export default function RiffGallery({ isOwner, isEditing, walletAddress }: RiffG
                         </SelectContent>
                     </Select>
                     {isOwner && (
-                        <Button className="bg-violet-600 hover:bg-violet-700">
+                        <Button 
+                            className="bg-violet-600 hover:bg-violet-700"
+                            onClick={handleUploadClick}
+                        >
                             <Plus className="mr-2 h-4 w-4" />
                             Upload Riff
                         </Button>
