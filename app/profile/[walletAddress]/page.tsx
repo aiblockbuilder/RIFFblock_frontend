@@ -15,7 +15,13 @@ import MainLayout from "@/components/layouts/main-layout"
 import CreativeGradientBackground from "@/components/creative-gradient-background"
 import { UserProfile } from "@/types/api-response"
 
-export default function ProfileVisitPage({ params }: { params: { walletAddress: string } }) {
+interface PageProps {
+    params: {
+        walletAddress: string
+    }
+}
+
+export default function ProfilePage({ params }: PageProps) {
     const { isConnected, walletAddress: currentUserWallet } = useWallet()
     const [activeTab, setActiveTab] = useState("music")
     const [profile, setProfile] = useState<UserProfile>()
@@ -63,9 +69,9 @@ export default function ProfileVisitPage({ params }: { params: { walletAddress: 
                 <CreativeGradientBackground variant="profile">
                     <div className="min-h-screen flex items-center justify-center">
                         <div className="bg-zinc-900/50 backdrop-blur-sm border border-zinc-800 rounded-xl p-8 text-center max-w-md">
-                            <h2 className="text-2xl font-bold mb-4">Profile Not Found</h2>
+                            <h2 className="text-2xl font-bold mb-4">No User Registered</h2>
                             <p className="text-zinc-400">
-                                We couldn't find a profile for this wallet address.
+                                This wallet address has not registered a profile yet.
                             </p>
                         </div>
                     </div>
