@@ -253,29 +253,101 @@ export default function MarketPage() {
         e?.stopPropagation()
 
         if (currentAudio && currentAudio.id === riff.id) {
-            if (isPlaying) {
-                audioRef.current?.pause()
-            } else {
-                audioRef.current?.play()
-            }
-            setIsPlaying(!isPlaying)
+            // If the same riff is clicked, toggle play/pause
+            setIsPlaying(!isPlaying);
+             // If pausing the current riff, hide the widget
+             if (isPlaying) {
+                setShowNowPlaying(false);
+             }
         } else {
-            if (audioRef.current) {
-                audioRef.current.pause()
-            }
-            setCurrentAudio(riff)
-            setIsPlaying(true)
-            // In a real app, we would load the audio file here
-            // For now, we'll just simulate it
-            setTimeout(() => {
-                if (audioRef.current) {
-                    audioRef.current.play()
-                }
-            }, 100)
+            // If a different riff is clicked, set it as current and start playing
+            setCurrentAudio(riff);
+            setIsPlaying(true);
+            setShowNowPlaying(true);
+        }
+    }
+
+    // Effect to handle audio playback based on currentAudio and isPlaying state
+    useEffect(() => {
+      if (audioRef.current) {
+        const audio = audioRef.current;
+
+        // Define the event listeners inside the effect to capture current state/props
+        const onCanPlayThrough = () => {
+          console.log('canplaythrough', currentAudio?.title);
+          // Check if it's the currently selected audio and if we still intend to play
+          if (currentAudio && isPlaying && audio.src === currentAudio.audioFile) {
+            audio.play().catch(error => {
+              console.error("Error playing audio after load:", error);
+               toast({
+                 variant: "destructive",
+                 title: "Playback Error",
+                 description: "Could not play the audio. Please try again.",
+               });
+               setIsPlaying(false); // Ensure state is false on error
+               setShowNowPlaying(false);
+               // setCurrentAudio(null); // Keep currentAudio set on load error?
+            });
+          }
+        };
+
+        const onEnded = () => {
+           console.log('audio ended', currentAudio?.title);
+           setIsPlaying(false);
+           setShowNowPlaying(false);
+           setCurrentAudio(null); // Reset current audio when it ends
+         };
+
+        // Add event listeners
+        audio.addEventListener('canplaythrough', onCanPlayThrough);
+        audio.addEventListener('ended', onEnded);
+
+        if (currentAudio && isPlaying) {
+          // Set source if it's different and load
+          if (audio.src !== currentAudio.audioFile) {
+             audio.src = currentAudio.audioFile;
+             audio.load();
+          } else if (audio.paused) {
+             // If source is the same and paused, try to play (e.g., after seeking or interruption)
+             audio.play().catch(error => {
+               console.error("Error resuming audio:", error);
+                toast({
+                  variant: "destructive",
+                  title: "Playback Error",
+                  description: "Could not resume audio playback.",
+                });
+                setIsPlaying(false);
+                setShowNowPlaying(false);
+             });
+          }
+
+          // Note: Play is now primarily initiated by canplaythrough, but the above handles resuming
+
+        } else {
+          // Pause if no riff is selected or isPlaying is false
+          audio.pause();
+           // If pausing manually, reset currentAudio and hide widget
+           if (currentAudio && !isPlaying) {
+              setCurrentAudio(null);
+              setShowNowPlaying(false);
+           }
         }
 
-        setShowNowPlaying(true)
-    }
+        // Cleanup listeners and pause/clear audio on effect cleanup
+        return () => {
+          console.log('cleanup effect', currentAudio?.title, isPlaying);
+          audio.removeEventListener('canplaythrough', onCanPlayThrough);
+          audio.removeEventListener('ended', onEnded);
+          // Pause and clear source on cleanup to prevent conflicts when state changes rapidly
+           audio.pause();
+           audio.src = '';
+           // Do NOT reset state variables (isPlaying, currentAudio, showNowPlaying) here
+           // as this cleanup runs on every state change, which would cause infinite loops or incorrect behavior.
+        };
+
+      } // No dependencies array here, relies on closure for current state
+       // Adding specific dependencies to help React optimize
+    }, [currentAudio, isPlaying, audioRef, setIsPlaying, setShowNowPlaying, setCurrentAudio, toast, console]);
 
     // Open riff detail modal
     const openRiffDetail = (riff: Riff) => {
@@ -361,9 +433,12 @@ export default function MarketPage() {
     // Simulate vinyl crackle sound on component mount
     useEffect(() => {
         // Initialize audio elements
+        // Removed canplaythrough event listener and cleanup
+
         return () => {
             // Cleanup sounds on unmount
             if (audioRef.current) {
+                // Removed canplaythrough event listener cleanup
                 audioRef.current.pause()
             }
             if (ambienceRef.current) {
@@ -373,7 +448,7 @@ export default function MarketPage() {
                 vinylFlipRef.current.pause()
             }
         }
-    }, [])
+    }, []) // Empty dependency array means this effect runs once on mount and cleanup runs on unmount
 
     // Close filter sidebar when clicking outside
     useEffect(() => {
@@ -420,7 +495,6 @@ export default function MarketPage() {
                 <audio
                     ref={audioRef}
                     src={currentAudio?.audioFile || "/placeholder-audio.mp3"}
-                    onEnded={() => setIsPlaying(false)}
                 />
                 <audio ref={ambienceRef} src="/vinyl-crackle.mp3" loop />
                 <audio ref={vinylFlipRef} src="/vinyl-flip.mp3" />
@@ -1464,7 +1538,13 @@ export default function MarketPage() {
                             </div>
                             <motion.button
                                 className="ml-auto text-orange-200/70 hover:text-orange-100 transition-colors"
-                                onClick={() => setShowNowPlaying(false)}
+                                onClick={() => {
+                                  // Stop audio, update state, and hide widget
+                                  audioRef.current?.pause();
+                                  setIsPlaying(false);
+                                  setShowNowPlaying(false);
+                                  setCurrentAudio(null); // Also reset currentAudio when manually closed
+                                }}
                                 whileHover={{ scale: 1.1 }}
                                 whileTap={{ scale: 0.9 }}
                             >

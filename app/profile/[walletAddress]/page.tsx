@@ -14,6 +14,8 @@ import FavoriteRiffs from "@/components/profile/favorite-riffs"
 import MainLayout from "@/components/layouts/main-layout"
 import CreativeGradientBackground from "@/components/creative-gradient-background"
 import { UserProfile } from "@/types/api-response"
+import { useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
 
 interface PageProps {
     params: {
@@ -26,6 +28,7 @@ export default function ProfilePage({ params }: PageProps) {
     const [activeTab, setActiveTab] = useState("music")
     const [profile, setProfile] = useState<UserProfile>()
     const [isLoading, setIsLoading] = useState(true)
+    const router = useRouter()
 
     // Fetch user profile data
     useEffect(() => {
@@ -93,6 +96,15 @@ export default function ProfilePage({ params }: PageProps) {
                             setIsEditing={() => {}} 
                             onSave={async () => {}}
                         />
+
+                        {/* Upload Riff Button (only for owner) */}
+                        {isOwner && (
+                            <div className="mt-4 text-center">
+                                <Button className="bg-violet-600 hover:bg-violet-700" onClick={() => router.push('/upload')}>
+                                    + Upload New Riff
+                                </Button>
+                            </div>
+                        )}
 
                         {/* Main Content */}
                         <div className="mt-8">

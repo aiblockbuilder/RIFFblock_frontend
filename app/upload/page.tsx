@@ -415,6 +415,9 @@ export default function UploadPage() {
                 formData.append("unlockPrivateMessages", String(unlockPrivateMessages))
                 formData.append("unlockBackstageContent", String(unlockBackstageContent))
                 formData.append("walletAddress", walletAddress)
+                if (fileDuration !== null) {
+                    formData.append("duration", String(fileDuration))
+                }
 
                 if (collection === "new" && newCollectionName) {
                     formData.append("newCollectionName", newCollectionName)
