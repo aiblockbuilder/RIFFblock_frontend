@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -31,6 +31,25 @@ export default function RiffGallery({ isOwner, isEditing, walletAddress }: RiffG
     const [sortBy, setSortBy] = useState("newest")
     const [playingRiff, setPlayingRiff] = useState<string | null>(null)
     const [isLoadingRiffs, setIsLoadingRiffs] = useState(false)
+    const audioRef = useRef<HTMLAudioElement | null>(null)
+
+    useEffect(() => {
+        // Create audio element
+        audioRef.current = new Audio()
+        
+        // Add event listeners
+        audioRef.current.addEventListener('ended', () => {
+            setPlayingRiff(null)
+        })
+
+        // Cleanup
+        return () => {
+            if (audioRef.current) {
+                audioRef.current.pause()
+                audioRef.current.src = ''
+            }
+        }
+    }, [])
 
     useEffect(() => {
         const fetchRiffs = async () => {
@@ -55,11 +74,33 @@ export default function RiffGallery({ isOwner, isEditing, walletAddress }: RiffG
         fetchRiffs()
     }, [walletAddress])
 
-    const togglePlay = (id: string) => {
-        if (playingRiff === id) {
+    const togglePlay = (riff: Riff) => {
+        if (!audioRef.current) return
+
+        if (playingRiff === riff.id.toString()) {
+            // Pause current riff
+            audioRef.current.pause()
             setPlayingRiff(null)
         } else {
-            setPlayingRiff(id)
+            // Play new riff
+            if (riff.audioFile) {
+                audioRef.current.src = riff.audioFile
+                audioRef.current.play().catch(error => {
+                    console.error("Error playing audio:", error)
+                    toast({
+                        title: "Error",
+                        description: "Failed to play audio. Please try again.",
+                        variant: "destructive",
+                    })
+                })
+                setPlayingRiff(riff.id.toString())
+            } else {
+                toast({
+                    title: "Error",
+                    description: "Audio file not found.",
+                    variant: "destructive",
+                })
+            }
         }
     }
 
@@ -120,7 +161,7 @@ export default function RiffGallery({ isOwner, isEditing, walletAddress }: RiffG
                                 <Image src={riff?.coverImage || "/placeholder.svg"} alt={riff.title} fill className="object-cover" />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                     <button
-                                        onClick={() => togglePlay(riff?.id.toString())}
+                                        onClick={() => togglePlay(riff)}
                                         className="w-12 h-12 rounded-full bg-violet-600/90 hover:bg-violet-700/90 flex items-center justify-center transition-all transform scale-90 group-hover:scale-100"
                                     >
                                         {playingRiff === riff?.id.toString() ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 ml-0.5" />}
@@ -195,7 +236,7 @@ export default function RiffGallery({ isOwner, isEditing, walletAddress }: RiffG
                             {/* <div className="text-sm text-violet-400 font-medium">{riff.tips.toLocaleString()} RIFF</div> */}
                             <div className="flex items-center gap-2">
                                 <button
-                                    onClick={() => togglePlay(riff.id.toString())}
+                                    onClick={() => togglePlay(riff)}
                                     className="w-8 h-8 rounded-full bg-zinc-800 hover:bg-violet-600/90 flex items-center justify-center transition-colors"
                                 >
                                     {playingRiff === riff.id.toString() ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
