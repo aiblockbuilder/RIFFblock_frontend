@@ -8,12 +8,14 @@ import { ArrowRight, Play, Pause, Rewind, FastForward } from "lucide-react"
 import WalletConnect from "@/components/wallet-connect"
 import { userApi, nftApi } from "@/lib/api-client"
 import { toast } from "@/components/ui/use-toast"
+import Link from "next/link"
 
 interface MostTippedProfile {
   name: string
   image: string
   riffTips: number
   topRiff: string
+  walletAddress: string
 }
 
 interface RiffNFT {
@@ -81,6 +83,7 @@ export default function StudioHero() {
           image: "/placeholder.svg",
           riffTips: 24350,
           topRiff: "Neon Cascade",
+          walletAddress: "",
         })
       } finally {
         setIsLoading(false)
@@ -216,34 +219,41 @@ export default function StudioHero() {
 
               {/* Artist content */}
               <div className="pt-10 pb-4 px-4 aspect-video">
-                <div className="relative w-full h-full rounded-lg overflow-hidden">
-                  {/* Artist image */}
-                  <Image
-                    src={featuredArtist?.image || "/placeholder.svg"}
-                    alt={featuredArtist?.name || "Featured Artist"}
-                    fill
-                    className="object-cover"
-                  />
+                {featuredArtist && featuredArtist.walletAddress ? (
+                  <Link href={`/profile/${featuredArtist.walletAddress}`} className="block relative w-full h-full rounded-lg overflow-hidden group">
+                    {/* Artist image */}
+                    <Image
+                      src={featuredArtist?.image || "/placeholder.svg"}
+                      alt={featuredArtist?.name || "Featured Artist"}
+                      fill
+                      className="object-cover"
+                    />
 
-                  {/* Artist info overlay */}
-                  <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 via-black/60 to-transparent">
-                    <div className="flex justify-between items-end">
-                      <div>
-                        <h3 className="text-2xl font-bold">{featuredArtist?.name || "Loading..."}</h3>
-                        <p className="text-violet-300">{featuredArtist?.topRiff || "Loading..."}</p>
-                      </div>
-                      <div className="bg-violet-500/20 backdrop-blur-sm px-3 py-1 rounded-full">
-                        <span className="text-violet-300 font-medium">
-                          {featuredArtist?.riffTips.toLocaleString() || "0"} RIFF
-                        </span>
+                    {/* Artist info overlay */}
+                    <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 via-black/60 to-transparent">
+                      <div className="flex justify-between items-end">
+                        <div>
+                          <h3 className="text-2xl font-bold">{featuredArtist?.name || "Loading..."}</h3>
+                          <p className="text-violet-300">{featuredArtist?.topRiff || "Loading..."}</p>
+                        </div>
+                        <div className="bg-violet-500/20 backdrop-blur-sm px-3 py-1 rounded-full">
+                          <span className="text-violet-300 font-medium">
+                            {featuredArtist?.riffTips.toLocaleString() || "0"} RIFF
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Monitor screen effect */}
-                  <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_30px_rgba(0,0,0,0.7)] rounded-lg"></div>
-                  <div className="absolute inset-0 pointer-events-none bg-blue-500/5 mix-blend-overlay"></div>
-                </div>
+                    {/* Monitor screen effect */}
+                    <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_30px_rgba(0,0,0,0.7)] rounded-lg"></div>
+                    <div className="absolute inset-0 pointer-events-none bg-blue-500/5 mix-blend-overlay"></div>
+                  </Link>
+                ) : (
+                  // Fallback or loading state if no featured artist or wallet address
+                  <div className="relative w-full h-full rounded-lg overflow-hidden flex items-center justify-center bg-zinc-900">
+                     <span className="text-zinc-500">Loading Featured Artist...</span>
+                  </div>
+                )}
               </div>
             </div>
 

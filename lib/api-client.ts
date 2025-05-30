@@ -170,6 +170,8 @@ export const nftApi = {
         return apiClient(`/riffs?${queryParams.toString()}`);
     },
 
+    getRecentRiffs: () => apiClient("/riffs/recent-uploads"),
+
     // Add other NFT-related API calls
 }
 

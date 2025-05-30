@@ -37,6 +37,7 @@ import WaveformVisualizer from "@/components/upload/waveform-visualizer"
 import WalletConnect from "@/components/wallet-connect"
 import CreativeGradientBackground from "@/components/creative-gradient-background"
 import { nftApi, collectionApi } from "@/lib/api-client"
+import { GENRES, MOODS, INSTRUMENTS, KEY_SIGNATURES, TIME_SIGNATURES, type Genre, type Mood, type Instrument, type KeySignature, type TimeSignature } from "@/constants/riff-options"
 
 // Define the steps in the upload process
 const STEPS = {
@@ -68,11 +69,11 @@ export default function UploadPage() {
     // Riff info state
     const [title, setTitle] = useState("")
     const [description, setDescription] = useState("")
-    const [genre, setGenre] = useState("")
-    const [mood, setMood] = useState("")
-    const [instrument, setInstrument] = useState("")
-    const [keySignature, setKeySignature] = useState("")
-    const [timeSignature, setTimeSignature] = useState("")
+    const [genre, setGenre] = useState<Genre>("Pop")
+    const [mood, setMood] = useState<Mood>("Happy")
+    const [instrument, setInstrument] = useState<Instrument>("Vocals")
+    const [keySignature, setKeySignature] = useState<KeySignature>("C")
+    const [timeSignature, setTimeSignature] = useState<TimeSignature>("4/4")
     const [isBargainBin, setIsBargainBin] = useState(false)
     const [collection, setCollection] = useState("new")
     const [newCollectionName, setNewCollectionName] = useState("")
@@ -414,6 +415,9 @@ export default function UploadPage() {
                 formData.append("unlockPrivateMessages", String(unlockPrivateMessages))
                 formData.append("unlockBackstageContent", String(unlockBackstageContent))
                 formData.append("walletAddress", walletAddress)
+                if (fileDuration !== null) {
+                    formData.append("duration", String(fileDuration))
+                }
 
                 if (collection === "new" && newCollectionName) {
                     formData.append("newCollectionName", newCollectionName)
@@ -686,101 +690,80 @@ export default function UploadPage() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="genre">Genre</Label>
-                                <Select value={genre} onValueChange={setGenre}>
-                                    <SelectTrigger id="genre" className="bg-zinc-900/50 border-zinc-800">
+                                <Select value={genre} onValueChange={(value: Genre) => setGenre(value)}>
+                                    <SelectTrigger className="w-full">
                                         <SelectValue placeholder="Select genre" />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-zinc-900 border-zinc-800">
-                                        <SelectItem value="rock">Rock</SelectItem>
-                                        <SelectItem value="electronic">Electronic</SelectItem>
-                                        <SelectItem value="hiphop">Hip Hop</SelectItem>
-                                        <SelectItem value="jazz">Jazz</SelectItem>
-                                        <SelectItem value="ambient">Ambient</SelectItem>
-                                        <SelectItem value="folk">Folk</SelectItem>
-                                        <SelectItem value="pop">Pop</SelectItem>
-                                        <SelectItem value="metal">Metal</SelectItem>
-                                        <SelectItem value="classical">Classical</SelectItem>
-                                        <SelectItem value="other">Other</SelectItem>
+                                    <SelectContent>
+                                        {GENRES.filter(g => g !== "All").map((g) => (
+                                            <SelectItem key={g} value={g}>
+                                                {g}
+                                            </SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                             </div>
 
                             <div className="space-y-2">
                                 <Label htmlFor="mood">Mood</Label>
-                                <Select value={mood} onValueChange={setMood}>
-                                    <SelectTrigger id="mood" className="bg-zinc-900/50 border-zinc-800">
+                                <Select value={mood} onValueChange={(value: Mood) => setMood(value)}>
+                                    <SelectTrigger className="w-full">
                                         <SelectValue placeholder="Select mood" />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-zinc-900 border-zinc-800">
-                                        <SelectItem value="energetic">Energetic</SelectItem>
-                                        <SelectItem value="relaxed">Relaxed</SelectItem>
-                                        <SelectItem value="dark">Dark</SelectItem>
-                                        <SelectItem value="uplifting">Uplifting</SelectItem>
-                                        <SelectItem value="melancholic">Melancholic</SelectItem>
-                                        <SelectItem value="aggressive">Aggressive</SelectItem>
-                                        <SelectItem value="playful">Playful</SelectItem>
-                                        <SelectItem value="ethereal">Ethereal</SelectItem>
-                                        <SelectItem value="other">Other</SelectItem>
+                                    <SelectContent>
+                                        {MOODS.filter(m => m !== "All").map((m) => (
+                                            <SelectItem key={m} value={m}>
+                                                {m}
+                                            </SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                             </div>
 
                             <div className="space-y-2">
                                 <Label htmlFor="instrument">Primary Instrument</Label>
-                                <Select value={instrument} onValueChange={setInstrument}>
-                                    <SelectTrigger id="instrument" className="bg-zinc-900/50 border-zinc-800">
-                                        <SelectValue placeholder="Select instrument" />
+                                <Select value={instrument} onValueChange={(value: Instrument) => setInstrument(value)}>
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="Select primary instrument" />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-zinc-900 border-zinc-800">
-                                        <SelectItem value="guitar">Guitar</SelectItem>
-                                        <SelectItem value="bass">Bass</SelectItem>
-                                        <SelectItem value="drums">Drums</SelectItem>
-                                        <SelectItem value="synth">Synth</SelectItem>
-                                        <SelectItem value="piano">Piano</SelectItem>
-                                        <SelectItem value="vocals">Vocals</SelectItem>
-                                        <SelectItem value="strings">Strings</SelectItem>
-                                        <SelectItem value="brass">Brass</SelectItem>
-                                        <SelectItem value="woodwinds">Woodwinds</SelectItem>
-                                        <SelectItem value="other">Other</SelectItem>
+                                    <SelectContent>
+                                        {INSTRUMENTS.filter(i => i !== "All").map((i) => (
+                                            <SelectItem key={i} value={i}>
+                                                {i}
+                                            </SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                             </div>
 
                             <div className="space-y-2">
                                 <Label htmlFor="key">Key Signature</Label>
-                                <Select value={keySignature} onValueChange={setKeySignature}>
-                                    <SelectTrigger id="key" className="bg-zinc-900/50 border-zinc-800">
-                                        <SelectValue placeholder="Select key" />
+                                <Select value={keySignature} onValueChange={(value: KeySignature) => setKeySignature(value)}>
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="Select key signature" />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-zinc-900 border-zinc-800">
-                                        <SelectItem value="c">C Major</SelectItem>
-                                        <SelectItem value="am">A Minor</SelectItem>
-                                        <SelectItem value="g">G Major</SelectItem>
-                                        <SelectItem value="em">E Minor</SelectItem>
-                                        <SelectItem value="d">D Major</SelectItem>
-                                        <SelectItem value="bm">B Minor</SelectItem>
-                                        <SelectItem value="a">A Major</SelectItem>
-                                        <SelectItem value="f#m">F# Minor</SelectItem>
-                                        <SelectItem value="e">E Major</SelectItem>
-                                        <SelectItem value="c#m">C# Minor</SelectItem>
-                                        <SelectItem value="other">Other</SelectItem>
+                                    <SelectContent>
+                                        {KEY_SIGNATURES.map((key) => (
+                                            <SelectItem key={key} value={key}>
+                                                {key}
+                                            </SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                             </div>
 
                             <div className="space-y-2">
                                 <Label htmlFor="time">Time Signature</Label>
-                                <Select value={timeSignature} onValueChange={setTimeSignature}>
-                                    <SelectTrigger id="time" className="bg-zinc-900/50 border-zinc-800">
+                                <Select value={timeSignature} onValueChange={(value: TimeSignature) => setTimeSignature(value)}>
+                                    <SelectTrigger className="w-full">
                                         <SelectValue placeholder="Select time signature" />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-zinc-900 border-zinc-800">
-                                        <SelectItem value="4/4">4/4</SelectItem>
-                                        <SelectItem value="3/4">3/4</SelectItem>
-                                        <SelectItem value="6/8">6/8</SelectItem>
-                                        <SelectItem value="5/4">5/4</SelectItem>
-                                        <SelectItem value="7/8">7/8</SelectItem>
-                                        <SelectItem value="other">Other</SelectItem>
+                                    <SelectContent>
+                                        {TIME_SIGNATURES.map((time) => (
+                                            <SelectItem key={time} value={time}>
+                                                {time}
+                                            </SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                             </div>

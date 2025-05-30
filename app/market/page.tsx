@@ -38,7 +38,8 @@ import { nftApi } from "@/lib/api-client"
 import { toast } from "@/components/ui/use-toast"
 
 // Import mock data only for featured artists
-import { featuredArtists, genres, moods, instruments } from "@/data/market-data"
+import { featuredArtists } from "@/data/market-data"
+import { GENRES, MOODS, INSTRUMENTS, type Genre, type Mood, type Instrument } from "@/constants/riff-options"
 
 // Define types for our data
 interface Riff {
@@ -97,9 +98,9 @@ export default function MarketPage() {
     const [currentAudio, setCurrentAudio] = useState<Riff | null>(null)
     const [soundEnabled, setSoundEnabled] = useState(false)
     const [showFilters, setShowFilters] = useState(false)
-    const [selectedGenre, setSelectedGenre] = useState("All")
-    const [selectedMood, setSelectedMood] = useState("All")
-    const [selectedInstrument, setSelectedInstrument] = useState("All")
+    const [selectedGenre, setSelectedGenre] = useState<Genre>("All")
+    const [selectedMood, setSelectedMood] = useState<Mood>("All")
+    const [selectedInstrument, setSelectedInstrument] = useState<Instrument>("All")
     const [priceRange, setPriceRange] = useState<[number, number]>([0, 50])
     const [showStakableOnly, setShowStakableOnly] = useState(false)
     const [showBackstageOnly, setShowBackstageOnly] = useState(false)
@@ -114,6 +115,7 @@ export default function MarketPage() {
     const [totalRiffs, setTotalRiffs] = useState(0)
     const [currentPage, setCurrentPage] = useState(0)
     const riffsPerPage = 20
+    const [recentUploads, setRecentUploads] = useState<Riff[]>([])
 
     const audioRef = useRef<HTMLAudioElement>(null)
     const ambienceRef = useRef<HTMLAudioElement>(null)
@@ -207,20 +209,41 @@ export default function MarketPage() {
         currentPage,
     ])
 
+    // Fetch recent uploads
+    const fetchRecentUploads = async () => {
+        try {
+            const response = await nftApi.getRecentRiffs(); // Assuming getRecentRiffs calls the new endpoint
+            setRecentUploads(response.riffs);
+        } catch (error) {
+            console.error("Error fetching recent uploads:", error);
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Failed to load recent uploads.",
+            });
+        }
+    };
+
+    // Fetch initial data on mount
+    useEffect(() => {
+        fetchRiffs();
+        fetchRecentUploads();
+    }, []); // Empty dependency array to run only once on mount
+
     // Group riffs by genre for bins
-    const riffsByGenre = genres.reduce<Record<string, Riff[]>>((acc, genre) => {
+    const riffsByGenre = GENRES.reduce<Record<string, Riff[]>>((acc, genre) => {
         acc[genre] = riffs.filter((riff) => riff.genre === genre)
         return acc
     }, {})
 
     // Group riffs by mood for bins
-    const riffsByMood = moods.reduce<Record<string, Riff[]>>((acc, mood) => {
+    const riffsByMood = MOODS.reduce<Record<string, Riff[]>>((acc, mood) => {
         acc[mood] = riffs.filter((riff) => riff.mood === mood)
         return acc
     }, {})
 
     // Group riffs by instrument for bins
-    const riffsByInstrument = instruments.reduce<Record<string, Riff[]>>((acc, instrument) => {
+    const riffsByInstrument = INSTRUMENTS.reduce<Record<string, Riff[]>>((acc, instrument) => {
         acc[instrument] = riffs.filter((riff) => riff.instrument === instrument)
         return acc
     }, {})
@@ -230,29 +253,101 @@ export default function MarketPage() {
         e?.stopPropagation()
 
         if (currentAudio && currentAudio.id === riff.id) {
-            if (isPlaying) {
-                audioRef.current?.pause()
-            } else {
-                audioRef.current?.play()
-            }
-            setIsPlaying(!isPlaying)
+            // If the same riff is clicked, toggle play/pause
+            setIsPlaying(!isPlaying);
+             // If pausing the current riff, hide the widget
+             if (isPlaying) {
+                setShowNowPlaying(false);
+             }
         } else {
-            if (audioRef.current) {
-                audioRef.current.pause()
-            }
-            setCurrentAudio(riff)
-            setIsPlaying(true)
-            // In a real app, we would load the audio file here
-            // For now, we'll just simulate it
-            setTimeout(() => {
-                if (audioRef.current) {
-                    audioRef.current.play()
-                }
-            }, 100)
+            // If a different riff is clicked, set it as current and start playing
+            setCurrentAudio(riff);
+            setIsPlaying(true);
+            setShowNowPlaying(true);
+        }
+    }
+
+    // Effect to handle audio playback based on currentAudio and isPlaying state
+    useEffect(() => {
+      if (audioRef.current) {
+        const audio = audioRef.current;
+
+        // Define the event listeners inside the effect to capture current state/props
+        const onCanPlayThrough = () => {
+          console.log('canplaythrough', currentAudio?.title);
+          // Check if it's the currently selected audio and if we still intend to play
+          if (currentAudio && isPlaying && audio.src === currentAudio.audioFile) {
+            audio.play().catch(error => {
+              console.error("Error playing audio after load:", error);
+               toast({
+                 variant: "destructive",
+                 title: "Playback Error",
+                 description: "Could not play the audio. Please try again.",
+               });
+               setIsPlaying(false); // Ensure state is false on error
+               setShowNowPlaying(false);
+               // setCurrentAudio(null); // Keep currentAudio set on load error?
+            });
+          }
+        };
+
+        const onEnded = () => {
+           console.log('audio ended', currentAudio?.title);
+           setIsPlaying(false);
+           setShowNowPlaying(false);
+           setCurrentAudio(null); // Reset current audio when it ends
+         };
+
+        // Add event listeners
+        audio.addEventListener('canplaythrough', onCanPlayThrough);
+        audio.addEventListener('ended', onEnded);
+
+        if (currentAudio && isPlaying) {
+          // Set source if it's different and load
+          if (audio.src !== currentAudio.audioFile) {
+             audio.src = currentAudio.audioFile;
+             audio.load();
+          } else if (audio.paused) {
+             // If source is the same and paused, try to play (e.g., after seeking or interruption)
+             audio.play().catch(error => {
+               console.error("Error resuming audio:", error);
+                toast({
+                  variant: "destructive",
+                  title: "Playback Error",
+                  description: "Could not resume audio playback.",
+                });
+                setIsPlaying(false);
+                setShowNowPlaying(false);
+             });
+          }
+
+          // Note: Play is now primarily initiated by canplaythrough, but the above handles resuming
+
+        } else {
+          // Pause if no riff is selected or isPlaying is false
+          audio.pause();
+           // If pausing manually, reset currentAudio and hide widget
+           if (currentAudio && !isPlaying) {
+              setCurrentAudio(null);
+              setShowNowPlaying(false);
+           }
         }
 
-        setShowNowPlaying(true)
-    }
+        // Cleanup listeners and pause/clear audio on effect cleanup
+        return () => {
+          console.log('cleanup effect', currentAudio?.title, isPlaying);
+          audio.removeEventListener('canplaythrough', onCanPlayThrough);
+          audio.removeEventListener('ended', onEnded);
+          // Pause and clear source on cleanup to prevent conflicts when state changes rapidly
+           audio.pause();
+           audio.src = '';
+           // Do NOT reset state variables (isPlaying, currentAudio, showNowPlaying) here
+           // as this cleanup runs on every state change, which would cause infinite loops or incorrect behavior.
+        };
+
+      } // No dependencies array here, relies on closure for current state
+       // Adding specific dependencies to help React optimize
+    }, [currentAudio, isPlaying, audioRef, setIsPlaying, setShowNowPlaying, setCurrentAudio, toast, console]);
 
     // Open riff detail modal
     const openRiffDetail = (riff: Riff) => {
@@ -338,9 +433,12 @@ export default function MarketPage() {
     // Simulate vinyl crackle sound on component mount
     useEffect(() => {
         // Initialize audio elements
+        // Removed canplaythrough event listener and cleanup
+
         return () => {
             // Cleanup sounds on unmount
             if (audioRef.current) {
+                // Removed canplaythrough event listener cleanup
                 audioRef.current.pause()
             }
             if (ambienceRef.current) {
@@ -350,7 +448,7 @@ export default function MarketPage() {
                 vinylFlipRef.current.pause()
             }
         }
-    }, [])
+    }, []) // Empty dependency array means this effect runs once on mount and cleanup runs on unmount
 
     // Close filter sidebar when clicking outside
     useEffect(() => {
@@ -397,7 +495,6 @@ export default function MarketPage() {
                 <audio
                     ref={audioRef}
                     src={currentAudio?.audioFile || "/placeholder-audio.mp3"}
-                    onEnded={() => setIsPlaying(false)}
                 />
                 <audio ref={ambienceRef} src="/vinyl-crackle.mp3" loop />
                 <audio ref={vinylFlipRef} src="/vinyl-flip.mp3" />
@@ -516,40 +613,77 @@ export default function MarketPage() {
                                             }}
                                         >
                                             <div className="flex gap-4 px-2 pb-2 pt-1" style={{ width: "max-content" }}>
-                                                {artists.map((artist) => (
-                                                    <motion.div
-                                                        key={artist.id}
-                                                        className="group relative w-[100px] cursor-pointer"
-                                                        onClick={() => openRiffDetail(artist as unknown as Riff)}
-                                                        whileHover={{
-                                                            y: -5,
-                                                            scale: 1.05,
-                                                            transition: { type: "spring", stiffness: 300, damping: 10 },
-                                                        }}
-                                                        whileTap={{ scale: 0.95 }}
-                                                    >
-                                                        <div className="relative h-[100px] w-[100px] rounded-md overflow-hidden shadow-lg transform transition-transform group-hover:shadow-orange-500/20">
-                                                            {/* Album cover */}
-                                                            <Image
-                                                                src={artist.image || "/placeholder.svg"}
-                                                                alt={artist.name}
-                                                                fill
-                                                                className="object-cover"
-                                                            />
+                                                {category === "New Uploads This Week" ? (
+                                                    recentUploads.map((riff) => (
+                                                        <motion.div
+                                                            key={riff.id}
+                                                            className="group relative w-[100px] cursor-pointer"
+                                                            onClick={() => openRiffDetail(riff)}
+                                                            whileHover={{
+                                                                y: -5,
+                                                                scale: 1.05,
+                                                                transition: { type: "spring", stiffness: 300, damping: 10 },
+                                                            }}
+                                                            whileTap={{ scale: 0.95 }}
+                                                        >
+                                                            <div className="relative h-[100px] w-[100px] rounded-md overflow-hidden shadow-lg transform transition-transform group-hover:shadow-orange-500/20">
+                                                                {/* Album cover */}
+                                                                <Image
+                                                                    src={riff.coverImage || "/placeholder.svg"}
+                                                                    alt={riff.title}
+                                                                    fill
+                                                                    className="object-cover"
+                                                                />
 
-                                                            {/* Vinyl record edge peeking out */}
-                                                            <div className="absolute left-0 top-0 w-1 h-full bg-black"></div>
+                                                                {/* Vinyl record edge peeking out */}
+                                                                <div className="absolute left-0 top-0 w-1 h-full bg-black"></div>
 
-                                                            {/* Overlay gradient */}
-                                                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                                                {/* Overlay gradient */}
+                                                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
 
-                                                            {/* Title */}
-                                                            <div className="absolute bottom-2 left-2 right-2 text-xs font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                {artist.name}
+                                                                {/* Title */}
+                                                                <div className="absolute bottom-2 left-2 right-2 text-xs font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                    {riff.title}
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    </motion.div>
-                                                ))}
+                                                        </motion.div>
+                                                    ))
+                                                ) : (
+                                                    artists.map((artist) => (
+                                                        <motion.div
+                                                            key={artist.id}
+                                                            className="group relative w-[100px] cursor-pointer"
+                                                            onClick={() => openRiffDetail(artist as unknown as Riff)}
+                                                            whileHover={{
+                                                                y: -5,
+                                                                scale: 1.05,
+                                                                transition: { type: "spring", stiffness: 300, damping: 10 },
+                                                            }}
+                                                            whileTap={{ scale: 0.95 }}
+                                                        >
+                                                            <div className="relative h-[100px] w-[100px] rounded-md overflow-hidden shadow-lg transform transition-transform group-hover:shadow-orange-500/20">
+                                                                {/* Album cover */}
+                                                                <Image
+                                                                    src={artist.image || "/placeholder.svg"}
+                                                                    alt={artist.name}
+                                                                    fill
+                                                                    className="object-cover"
+                                                                />
+
+                                                                {/* Vinyl record edge peeking out */}
+                                                                <div className="absolute left-0 top-0 w-1 h-full bg-black"></div>
+
+                                                                {/* Overlay gradient */}
+                                                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+
+                                                                {/* Title */}
+                                                                <div className="absolute bottom-2 left-2 right-2 text-xs font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                    {artist.name}
+                                                                </div>
+                                                            </div>
+                                                        </motion.div>
+                                                    ))
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -582,7 +716,7 @@ export default function MarketPage() {
 
                         {/* Genre crates */}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                            {genres.map((genre) => (
+                            {GENRES.filter(genre => genre !== "All").map((genre) => (
                                 <motion.div
                                     key={genre}
                                     className={`relative overflow-hidden rounded-md cursor-pointer ${selectedGenre === genre
@@ -596,7 +730,6 @@ export default function MarketPage() {
                                     whileHover={{ scale: 1.02 }}
                                     whileTap={{ scale: 0.98 }}
                                     style={{ transformOrigin: "center" }}
-
                                 >
                                     {/* Wooden crate texture */}
                                     <div className="absolute inset-0 wood-grain-pattern opacity-70"></div>
@@ -713,18 +846,15 @@ export default function MarketPage() {
                             <div className="absolute inset-0 wood-grain-pattern opacity-70"></div>
 
                             <div className="relative p-4">
-                                <div className="flex items-center gap-4 mb-4 overflow-x-auto no-scrollbar">
-                                    {moods.map((mood) => (
+                                <div className="flex items-center gap-4 mb-4 flex-wrap">
+                                    {MOODS.filter(mood => mood !== "All").map((mood) => (
                                         <motion.button
                                             key={mood}
                                             className={`px-3 py-1 rounded-full whitespace-nowrap ${selectedMood === mood
                                                 ? "bg-orange-500/30 text-orange-100 border border-orange-600/30"
                                                 : "bg-orange-900/20 text-orange-200/70 hover:bg-orange-800/30 hover:text-orange-100 border border-orange-800/30"
                                                 }`}
-                                            onClick={() => {
-                                                setSelectedMood(mood === selectedMood ? "All" : mood)
-                                                playVinylFlipSound()
-                                            }}
+                                            onClick={() => setSelectedMood(mood)}
                                             whileHover={{ scale: 1.05 }}
                                             whileTap={{ scale: 0.95 }}
                                         >
@@ -815,8 +945,8 @@ export default function MarketPage() {
                             <div className="absolute inset-0 wood-grain-pattern opacity-70"></div>
 
                             <div className="relative p-4">
-                                <div className="flex items-center gap-4 mb-4 overflow-x-auto no-scrollbar">
-                                    {instruments.map((instrument) => (
+                                <div className="flex items-center gap-4 mb-4 flex-wrap">
+                                    {INSTRUMENTS.filter(instrument => instrument !== "All").map((instrument) => (
                                         <motion.button
                                             key={instrument}
                                             className={`px-3 py-1 rounded-full whitespace-nowrap ${selectedInstrument === instrument
@@ -963,13 +1093,13 @@ export default function MarketPage() {
                     {showFilters && (
                         <motion.div
                             ref={filterSidebarRef}
-                            className="fixed inset-y-0 right-0 w-64 md:w-80 bg-gradient-to-l from-stone-800 to-stone-900/95 backdrop-blur-md shadow-lg shadow-black/30 z-40 p-4 border-l border-orange-800/30"
+                            className="fixed top-16 bottom-0 right-0 w-64 md:w-80 bg-gradient-to-l from-stone-800 to-stone-900/95 backdrop-blur-md shadow-lg shadow-black/30 z-40 border-l border-orange-800/30 flex flex-col"
                             initial={{ x: "100%" }}
                             animate={{ x: 0 }}
                             exit={{ x: "100%" }}
                             transition={{ type: "spring", damping: 25, stiffness: 300 }}
                         >
-                            <div className="flex items-center justify-between mb-6">
+                            <div className="flex items-center justify-between p-4 border-b border-orange-800/30">
                                 <h3 className="font-medium text-orange-100 font-serif">Filters</h3>
                                 <motion.button
                                     onClick={toggleFilters}
@@ -981,156 +1111,189 @@ export default function MarketPage() {
                                 </motion.button>
                             </div>
 
-                            <div className="space-y-6">
-                                {/* Sort options */}
-                                <div>
-                                    <h4 className="text-sm font-medium text-orange-200 mb-2 font-serif">Sort By</h4>
-                                    <div className="space-y-1">
-                                        {["Newest", "A-Z", "Z-A", "Lowest Price", "Highest Price", "Most Tipped"].map((option) => (
-                                            <motion.button
-                                                key={option}
-                                                className={`block w-full text-left text-sm py-1 transition-colors ${sortOption === option ? "text-orange-400" : "text-orange-200/70 hover:text-orange-100"
-                                                    }`}
-                                                onClick={() => setSortOption(option)}
-                                                whileHover={{ x: 5 }}
-                                            >
-                                                {option}
-                                            </motion.button>
-                                        ))}
+                            <div className="flex-1 overflow-y-auto pb-20">
+                                <div className="p-4 space-y-6">
+                                    {/* Sort options */}
+                                    <div>
+                                        <h4 className="text-sm font-medium text-orange-200 mb-2 font-serif">Sort By</h4>
+                                        <div className="space-y-1">
+                                            {["Newest", "A-Z", "Z-A", "Lowest Price", "Highest Price", "Most Tipped"].map((option) => (
+                                                <motion.button
+                                                    key={option}
+                                                    className={`block w-full text-left text-sm py-1 transition-colors ${sortOption === option ? "text-orange-400" : "text-orange-200/70 hover:text-orange-100"
+                                                        }`}
+                                                    onClick={() => setSortOption(option)}
+                                                    whileHover={{ x: 5 }}
+                                                >
+                                                    {option}
+                                                </motion.button>
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
 
-                                {/* Genre filter */}
-                                <div>
-                                    <h4 className="text-sm font-medium text-orange-200 mb-2 font-serif">Genre</h4>
-                                    <div className="flex flex-wrap gap-2">
-                                        <motion.button
-                                            className={`text-xs px-2 py-1 rounded-full transition-colors ${selectedGenre === "All"
-                                                ? "bg-orange-500/30 text-orange-100 border border-orange-600/30"
-                                                : "bg-orange-900/20 text-orange-200/70 hover:bg-orange-800/30 hover:text-orange-100 border border-orange-800/30"
-                                                }`}
-                                            onClick={() => setSelectedGenre("All")}
-                                            whileHover={{ scale: 1.05 }}
-                                            whileTap={{ scale: 0.95 }}
-                                        >
-                                            All
-                                        </motion.button>
-
-                                        {genres.slice(0, 6).map((genre) => (
+                                    {/* Genre filter */}
+                                    <div>
+                                        <h4 className="text-sm font-medium text-orange-200 mb-2 font-serif">Genre</h4>
+                                        <div className="flex flex-wrap gap-2">
                                             <motion.button
-                                                key={genre}
-                                                className={`text-xs px-2 py-1 rounded-full transition-colors ${selectedGenre === genre
+                                                className={`text-xs px-2 py-1 rounded-full transition-colors ${selectedGenre === "All"
                                                     ? "bg-orange-500/30 text-orange-100 border border-orange-600/30"
                                                     : "bg-orange-900/20 text-orange-200/70 hover:bg-orange-800/30 hover:text-orange-100 border border-orange-800/30"
                                                     }`}
-                                                onClick={() => setSelectedGenre(genre)}
+                                                onClick={() => setSelectedGenre("All")}
                                                 whileHover={{ scale: 1.05 }}
                                                 whileTap={{ scale: 0.95 }}
                                             >
-                                                {genre}
+                                                All
                                             </motion.button>
-                                        ))}
-                                        <button className="text-xs text-orange-400 hover:underline">More...</button>
+
+                                            {GENRES.filter(genre => genre !== "All").map((genre) => (
+                                                <motion.button
+                                                    key={genre}
+                                                    className={`text-xs px-2 py-1 rounded-full transition-colors ${selectedGenre === genre
+                                                        ? "bg-orange-500/30 text-orange-100 border border-orange-600/30"
+                                                        : "bg-orange-900/20 text-orange-200/70 hover:bg-orange-800/30 hover:text-orange-100 border border-orange-800/30"
+                                                        }`}
+                                                    onClick={() => setSelectedGenre(genre)}
+                                                    whileHover={{ scale: 1.05 }}
+                                                    whileTap={{ scale: 0.95 }}
+                                                >
+                                                    {genre}
+                                                </motion.button>
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
 
-                                {/* Mood filter */}
-                                <div>
-                                    <h4 className="text-sm font-medium text-orange-200 mb-2 font-serif">Mood</h4>
-                                    <div className="flex flex-wrap gap-2">
-                                        <motion.button
-                                            className={`text-xs px-2 py-1 rounded-full transition-colors ${selectedMood === "All"
-                                                ? "bg-orange-500/30 text-orange-100 border border-orange-600/30"
-                                                : "bg-orange-900/20 text-orange-200/70 hover:bg-orange-800/30 hover:text-orange-100 border border-orange-800/30"
-                                                }`}
-                                            onClick={() => setSelectedMood("All")}
-                                            whileHover={{ scale: 1.05 }}
-                                            whileTap={{ scale: 0.95 }}
-                                        >
-                                            All
-                                        </motion.button>
-
-                                        {moods.slice(0, 6).map((mood) => (
+                                    {/* Mood filter */}
+                                    <div>
+                                        <h4 className="text-sm font-medium text-orange-200 mb-2 font-serif">Mood</h4>
+                                        <div className="flex flex-wrap gap-2">
                                             <motion.button
-                                                key={mood}
-                                                className={`text-xs px-2 py-1 rounded-full transition-colors ${selectedMood === mood
+                                                className={`text-xs px-2 py-1 rounded-full transition-colors ${selectedMood === "All"
                                                     ? "bg-orange-500/30 text-orange-100 border border-orange-600/30"
                                                     : "bg-orange-900/20 text-orange-200/70 hover:bg-orange-800/30 hover:text-orange-100 border border-orange-800/30"
                                                     }`}
-                                                onClick={() => setSelectedMood(mood)}
+                                                onClick={() => setSelectedMood("All")}
                                                 whileHover={{ scale: 1.05 }}
                                                 whileTap={{ scale: 0.95 }}
                                             >
-                                                {mood}
+                                                All
                                             </motion.button>
-                                        ))}
-                                        <button className="text-xs text-orange-400 hover:underline">More...</button>
-                                    </div>
-                                </div>
 
-                                {/* Price range */}
-                                <div>
-                                    <div className="flex items-center justify-between mb-2">
-                                        <h4 className="text-sm font-medium text-orange-200 font-serif">Price Range</h4>
-                                        <span className="text-xs text-orange-200/70">
-                                            {priceRange[0]} - {priceRange[1]} RIFF
-                                        </span>
+                                            {MOODS.filter(mood => mood !== "All").map((mood) => (
+                                                <motion.button
+                                                    key={mood}
+                                                    className={`text-xs px-2 py-1 rounded-full transition-colors ${selectedMood === mood
+                                                        ? "bg-orange-500/30 text-orange-100 border border-orange-600/30"
+                                                        : "bg-orange-900/20 text-orange-200/70 hover:bg-orange-800/30 hover:text-orange-100 border border-orange-800/30"
+                                                        }`}
+                                                    onClick={() => setSelectedMood(mood)}
+                                                    whileHover={{ scale: 1.05 }}
+                                                    whileTap={{ scale: 0.95 }}
+                                                >
+                                                    {mood}
+                                                </motion.button>
+                                            ))}
+                                        </div>
                                     </div>
-                                    <Slider
-                                        defaultValue={priceRange}
-                                        min={0}
-                                        max={50}
-                                        step={1}
-                                        onValueChange={(value) => setPriceRange(value as [number, number])}
-                                        className="my-4"
-                                    />
-                                </div>
 
-                                {/* Toggle filters */}
-                                <div className="space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <Label htmlFor="stakable" className="text-sm text-orange-200">
-                                            Stakable Only
-                                        </Label>
-                                        <Switch
-                                            id="stakable"
-                                            checked={showStakableOnly}
-                                            onCheckedChange={setShowStakableOnly}
-                                            className="data-[state=checked]:bg-orange-600"
+                                    {/* Instrument filter */}
+                                    <div>
+                                        <h4 className="text-sm font-medium text-orange-200 mb-2 font-serif">Instrument</h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            <motion.button
+                                                className={`text-xs px-2 py-1 rounded-full transition-colors ${selectedInstrument === "All"
+                                                    ? "bg-orange-500/30 text-orange-100 border border-orange-600/30"
+                                                    : "bg-orange-900/20 text-orange-200/70 hover:bg-orange-800/30 hover:text-orange-100 border border-orange-800/30"
+                                                    }`}
+                                                onClick={() => setSelectedInstrument("All")}
+                                                whileHover={{ scale: 1.05 }}
+                                                whileTap={{ scale: 0.95 }}
+                                            >
+                                                All
+                                            </motion.button>
+
+                                            {INSTRUMENTS.filter(instrument => instrument !== "All").map((instrument) => (
+                                                <motion.button
+                                                    key={instrument}
+                                                    className={`text-xs px-2 py-1 rounded-full transition-colors ${selectedInstrument === instrument
+                                                        ? "bg-orange-500/30 text-orange-100 border border-orange-600/30"
+                                                        : "bg-orange-900/20 text-orange-200/70 hover:bg-orange-800/30 hover:text-orange-100 border border-orange-800/30"
+                                                        }`}
+                                                    onClick={() => setSelectedInstrument(instrument)}
+                                                    whileHover={{ scale: 1.05 }}
+                                                    whileTap={{ scale: 0.95 }}
+                                                >
+                                                    {instrument}
+                                                </motion.button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Price range */}
+                                    <div>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <h4 className="text-sm font-medium text-orange-200 font-serif">Price Range</h4>
+                                            <span className="text-xs text-orange-200/70">
+                                                {priceRange[0]} - {priceRange[1]} RIFF
+                                            </span>
+                                        </div>
+                                        <Slider
+                                            defaultValue={priceRange}
+                                            min={0}
+                                            max={50}
+                                            step={1}
+                                            onValueChange={(value) => setPriceRange(value as [number, number])}
+                                            className="my-4"
                                         />
                                     </div>
-                                    <div className="flex items-center justify-between">
-                                        <Label htmlFor="backstage" className="text-sm text-orange-200">
-                                            Backstage Available
-                                        </Label>
-                                        <Switch
-                                            id="backstage"
-                                            checked={showBackstageOnly}
-                                            onCheckedChange={setShowBackstageOnly}
-                                            className="data-[state=checked]:bg-orange-600"
-                                        />
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <Label htmlFor="unlockable" className="text-sm text-orange-200">
-                                            Unlockable Content
-                                        </Label>
-                                        <Switch
-                                            id="unlockable"
-                                            checked={showUnlockableOnly}
-                                            onCheckedChange={setShowUnlockableOnly}
-                                            className="data-[state=checked]:bg-orange-600"
-                                        />
-                                    </div>
-                                </div>
 
-                                {/* Reset filters */}
-                                <Button
-                                    variant="outline"
-                                    className="w-full mt-4 border-orange-700/50 text-orange-200 hover:text-orange-100 hover:bg-orange-900/30"
-                                    onClick={resetFilters}
-                                >
-                                    Reset Filters
-                                </Button>
+                                    {/* Toggle filters */}
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <Label htmlFor="stakable" className="text-sm text-orange-200">
+                                                Stakable Only
+                                            </Label>
+                                            <Switch
+                                                id="stakable"
+                                                checked={showStakableOnly}
+                                                onCheckedChange={setShowStakableOnly}
+                                                className="data-[state=checked]:bg-orange-600"
+                                            />
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <Label htmlFor="backstage" className="text-sm text-orange-200">
+                                                Backstage Available
+                                            </Label>
+                                            <Switch
+                                                id="backstage"
+                                                checked={showBackstageOnly}
+                                                onCheckedChange={setShowBackstageOnly}
+                                                className="data-[state=checked]:bg-orange-600"
+                                            />
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <Label htmlFor="unlockable" className="text-sm text-orange-200">
+                                                Unlockable Content
+                                            </Label>
+                                            <Switch
+                                                id="unlockable"
+                                                checked={showUnlockableOnly}
+                                                onCheckedChange={setShowUnlockableOnly}
+                                                className="data-[state=checked]:bg-orange-600"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Reset filters */}
+                                    <Button
+                                        variant="outline"
+                                        className="w-full mt-4 border-orange-700/50 text-orange-200 hover:text-orange-100 hover:bg-orange-900/30"
+                                        onClick={resetFilters}
+                                    >
+                                        Reset Filters
+                                    </Button>
+                                </div>
                             </div>
                         </motion.div>
                     )}
@@ -1375,7 +1538,13 @@ export default function MarketPage() {
                             </div>
                             <motion.button
                                 className="ml-auto text-orange-200/70 hover:text-orange-100 transition-colors"
-                                onClick={() => setShowNowPlaying(false)}
+                                onClick={() => {
+                                  // Stop audio, update state, and hide widget
+                                  audioRef.current?.pause();
+                                  setIsPlaying(false);
+                                  setShowNowPlaying(false);
+                                  setCurrentAudio(null); // Also reset currentAudio when manually closed
+                                }}
                                 whileHover={{ scale: 1.1 }}
                                 whileTap={{ scale: 0.9 }}
                             >
