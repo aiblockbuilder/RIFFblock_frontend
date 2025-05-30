@@ -34,36 +34,61 @@ import WalletConnect from "@/components/wallet-connect"
 import MainLayout from "@/components/layouts/main-layout"
 import VerticalLineWaveform from "@/components/vertical-line-waveform"
 import StringLights from "@/components/string-lights"
+import { nftApi } from "@/lib/api-client"
+import { toast } from "@/components/ui/use-toast"
 
-// Import mock data
-import { featuredArtists, riffs, bargainRiffs, genres, moods, instruments } from "@/data/market-data"
+// Import mock data only for featured artists
+import { featuredArtists, genres, moods, instruments } from "@/data/market-data"
 
 // Define types for our data
 interface Riff {
     id: number
     title: string
-    artist: string
-    artistId: number
+    description: string
+    audioFile: string
+    coverImage: string | null
+    audioCid: string
+    coverCid: string | null
+    duration: number | null
     genre: string
-    mood?: string
-    instrument?: string
-    price: number
+    mood: string
+    instrument: string
+    keySignature: string
+    timeSignature: string
+    isBargainBin: boolean
+    price: string
     currency: string
-    image: string
-    audio?: string
+    royaltyPercentage: number
+    isStakable: boolean
+    stakingRoyaltyShare: number
+    isNft: boolean
+    tokenId: string | null
+    contractAddress: string | null
+    unlockSourceFiles: boolean
+    unlockRemixRights: boolean
+    unlockPrivateMessages: boolean
+    unlockBackstageContent: boolean
+    creatorId: number
+    collectionId: number
     createdAt: string
-    stakable: boolean
-    backstage: boolean
-    unlockable: boolean
-    tips: number
-    description?: string
+    updatedAt: string
+    creator: {
+        id: number
+        name: string
+        walletAddress: string
+        avatar: string | null
+    }
+    collection: {
+        id: number
+        name: string
+    }
 }
 
 interface Artist {
-    id: number;
-    name: string;
-    image: string;
-    category: string;
+    id: number
+    name: string
+    image: string
+    category: string
 }
 
 export default function MarketPage() {
@@ -84,6 +109,11 @@ export default function MarketPage() {
     const [activeShelf, setActiveShelf] = useState<string | null>(null)
     const [activeBin, setActiveBin] = useState<string | null>(null)
     const [showNowPlaying, setShowNowPlaying] = useState(false)
+    const [riffs, setRiffs] = useState<Riff[]>([])
+    const [isLoading, setIsLoading] = useState(true)
+    const [totalRiffs, setTotalRiffs] = useState(0)
+    const [currentPage, setCurrentPage] = useState(0)
+    const riffsPerPage = 20
 
     const audioRef = useRef<HTMLAudioElement>(null)
     const ambienceRef = useRef<HTMLAudioElement>(null)
@@ -101,76 +131,97 @@ export default function MarketPage() {
         return acc
     }, {})
 
-    // Filter riffs based on selected filters
-    const filteredRiffs = riffs.filter((riff) => {
-        // Search query filter
-        if (
-            searchQuery &&
-            !riff.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
-            !riff.artist.toLowerCase().includes(searchQuery.toLowerCase()) &&
-            !riff.genre.toLowerCase().includes(searchQuery.toLowerCase())
-        ) {
-            return false
+    // Fetch riffs from API
+    const fetchRiffs = async () => {
+        try {
+            setIsLoading(true)
+            const params: any = {
+                limit: riffsPerPage,
+                offset: currentPage * riffsPerPage,
+            }
+
+            // Add filters
+            if (selectedGenre !== "All") params.genre = selectedGenre
+            if (selectedMood !== "All") params.mood = selectedMood
+            if (selectedInstrument !== "All") params.instrument = selectedInstrument
+            if (priceRange[0] > 0) params.priceMin = priceRange[0]
+            if (priceRange[1] < 50) params.priceMax = priceRange[1]
+            if (showStakableOnly) params.stakable = true
+            if (showBackstageOnly) params.backstage = true
+            if (showUnlockableOnly) params.unlockable = true
+
+            // Add search query if exists
+            if (searchQuery) {
+                // Note: You might need to add a search parameter to your backend API
+                params.search = searchQuery
+            }
+
+            // Add sorting
+            switch (sortOption) {
+                case "A-Z":
+                    params.sortBy = "title-asc"
+                    break
+                case "Z-A":
+                    params.sortBy = "title-desc"
+                    break
+                case "Lowest Price":
+                    params.sortBy = "price-asc"
+                    break
+                case "Highest Price":
+                    params.sortBy = "price-desc"
+                    break
+                case "Newest":
+                default:
+                    params.sortBy = "createdAt-desc"
+                    break
+            }
+
+            const response = await nftApi.getAllRiffs(params)
+            setRiffs(response.riffs)
+            setTotalRiffs(response.total)
+        } catch (error) {
+            console.error("Error fetching riffs:", error)
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Failed to load riffs. Please try again.",
+            })
+        } finally {
+            setIsLoading(false)
         }
+    }
 
-        // Genre filter
-        if (selectedGenre !== "All" && riff.genre !== selectedGenre) return false
-
-        // Mood filter
-        if (selectedMood !== "All" && riff.mood !== selectedMood) return false
-
-        // Instrument filter
-        if (selectedInstrument !== "All" && riff.instrument !== selectedInstrument) return false
-
-        // Price range filter
-        if (riff.price < priceRange[0] || riff.price > priceRange[1]) return false
-
-        // Stakable filter
-        if (showStakableOnly && !riff.stakable) return false
-
-        // Backstage filter
-        if (showBackstageOnly && !riff.backstage) return false
-
-        // Unlockable filter
-        if (showUnlockableOnly && !riff.unlockable) return false
-
-        return true
-    })
-
-    // Sort filtered riffs
-    const sortedRiffs = [...filteredRiffs].sort((a, b) => {
-        switch (sortOption) {
-            case "A-Z":
-                return a.title.localeCompare(b.title)
-            case "Z-A":
-                return b.title.localeCompare(a.title)
-            case "Lowest Price":
-                return a.price - b.price
-            case "Highest Price":
-                return b.price - a.price
-            case "Most Tipped":
-                return b.tips - a.tips
-            case "Newest":
-            default:
-                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        }
-    })
+    // Fetch riffs when filters change
+    useEffect(() => {
+        fetchRiffs()
+    }, [
+        selectedGenre,
+        selectedMood,
+        selectedInstrument,
+        priceRange,
+        showStakableOnly,
+        showBackstageOnly,
+        showUnlockableOnly,
+        sortOption,
+        searchQuery,
+        currentPage,
+    ])
 
     // Group riffs by genre for bins
     const riffsByGenre = genres.reduce<Record<string, Riff[]>>((acc, genre) => {
-        acc[genre] = sortedRiffs.filter((riff) => riff.genre === genre)
+        acc[genre] = riffs.filter((riff) => riff.genre === genre)
         return acc
     }, {})
 
     // Group riffs by mood for bins
     const riffsByMood = moods.reduce<Record<string, Riff[]>>((acc, mood) => {
-        acc[mood] = sortedRiffs.filter((riff) => riff.mood === mood)
+        acc[mood] = riffs.filter((riff) => riff.mood === mood)
         return acc
     }, {})
 
     // Group riffs by instrument for bins
     const riffsByInstrument = instruments.reduce<Record<string, Riff[]>>((acc, instrument) => {
-        acc[instrument] = sortedRiffs.filter((riff) => riff.instrument === instrument)
+        acc[instrument] = riffs.filter((riff) => riff.instrument === instrument)
         return acc
     }, {})
 
@@ -345,7 +396,7 @@ export default function MarketPage() {
                 {/* Audio elements */}
                 <audio
                     ref={audioRef}
-                    src={currentAudio?.audio || "/placeholder-audio.mp3"}
+                    src={currentAudio?.audioFile || "/placeholder-audio.mp3"}
                     onEnded={() => setIsPlaying(false)}
                 />
                 <audio ref={ambienceRef} src="/vinyl-crackle.mp3" loop />
@@ -578,7 +629,7 @@ export default function MarketPage() {
                                         {selectedGenre === "All" ? "All Genres" : selectedGenre}
                                     </h3>
                                     <span className="text-xs text-orange-200/70">
-                                        {selectedGenre === "All" ? sortedRiffs.length : riffsByGenre[selectedGenre]?.length || 0} riffs
+                                        {selectedGenre === "All" ? riffs.length : riffsByGenre[selectedGenre]?.length || 0} riffs
                                     </span>
                                 </div>
 
@@ -614,7 +665,7 @@ export default function MarketPage() {
                                 {/* Horizontally scrollable bin content */}
                                 <div id="genre-bin" className="overflow-x-auto no-scrollbar">
                                     <div className="flex gap-4 pb-2" style={{ width: "max-content" }}>
-                                        {(selectedGenre === "All" ? sortedRiffs : riffsByGenre[selectedGenre] || []).map((riff) => (
+                                        {(selectedGenre === "All" ? riffs : riffsByGenre[selectedGenre] || []).map((riff) => (
                                             <AlbumCard
                                                 key={riff.id}
                                                 riff={riff}
@@ -716,7 +767,7 @@ export default function MarketPage() {
                                 {/* Horizontally scrollable bin content */}
                                 <div id="mood-bin" className="overflow-x-auto no-scrollbar">
                                     <div className="flex gap-4 pb-2" style={{ width: "max-content" }}>
-                                        {(selectedMood === "All" ? sortedRiffs : riffsByMood[selectedMood] || []).map((riff) => (
+                                        {(selectedMood === "All" ? riffs : riffsByMood[selectedMood] || []).map((riff) => (
                                             <AlbumCard
                                                 key={riff.id}
                                                 riff={riff}
@@ -818,7 +869,7 @@ export default function MarketPage() {
                                 {/* Horizontally scrollable bin content */}
                                 <div id="instrument-bin" className="overflow-x-auto no-scrollbar">
                                     <div className="flex gap-4 pb-2" style={{ width: "max-content" }}>
-                                        {(selectedInstrument === "All" ? sortedRiffs : riffsByInstrument[selectedInstrument] || []).map(
+                                        {(selectedInstrument === "All" ? riffs : riffsByInstrument[selectedInstrument] || []).map(
                                             (riff) => (
                                                 <AlbumCard
                                                     key={riff.id}
@@ -890,7 +941,7 @@ export default function MarketPage() {
                             {/* Horizontally scrollable bin content */}
                             <div id="bargain-bin" className="overflow-x-auto no-scrollbar">
                                 <div className="flex gap-4 pb-2" style={{ width: "max-content" }}>
-                                    {bargainRiffs.map((riff) => (
+                                    {riffs.map((riff) => (
                                         <AlbumCard
                                             key={riff.id}
                                             riff={riff}
@@ -1127,7 +1178,7 @@ export default function MarketPage() {
 
                                                 {/* Album art */}
                                                 <Image
-                                                    src={selectedRiff.image || "/placeholder.svg"}
+                                                    src={selectedRiff.coverImage || "/placeholder.svg"}
                                                     alt={selectedRiff.title}
                                                     fill
                                                     className="object-cover z-10"
@@ -1154,7 +1205,7 @@ export default function MarketPage() {
                                                     </motion.button>
                                                     <div>
                                                         <h4 className="text-sm font-medium text-orange-100">{selectedRiff.title}</h4>
-                                                        <p className="text-xs text-orange-200/70">{selectedRiff.artist}</p>
+                                                        <p className="text-xs text-orange-200/70">{selectedRiff.creator.name}</p>
                                                     </div>
                                                 </div>
 
@@ -1171,8 +1222,8 @@ export default function MarketPage() {
                                         {/* Right side - Details and actions */}
                                         <div>
                                             <h3 className="text-xl font-bold text-orange-100 mb-1 font-serif">{selectedRiff.title}</h3>
-                                            <Link href={`/profile/${selectedRiff.artistId}`} className="text-orange-400 hover:underline">
-                                                {selectedRiff.artist}
+                                            <Link href={`/profile/${selectedRiff.creatorId}`} className="text-orange-400 hover:underline">
+                                                {selectedRiff.creator.name}
                                             </Link>
 
                                             <div className="flex items-center gap-2 mt-4 mb-6">
@@ -1189,17 +1240,17 @@ export default function MarketPage() {
                                                         {selectedRiff.instrument}
                                                     </div>
                                                 )}
-                                                {selectedRiff.stakable && (
+                                                {selectedRiff.isStakable && (
                                                     <div className="bg-violet-500/20 px-2 py-1 rounded text-xs text-violet-300 border border-violet-500/30">
                                                         Stakable
                                                     </div>
                                                 )}
-                                                {selectedRiff.backstage && (
+                                                {selectedRiff.unlockBackstageContent && (
                                                     <div className="bg-orange-500/20 px-2 py-1 rounded text-xs text-orange-300 border border-orange-500/30">
                                                         Backstage
                                                     </div>
                                                 )}
-                                                {selectedRiff.unlockable && (
+                                                {(selectedRiff.unlockSourceFiles || selectedRiff.unlockRemixRights || selectedRiff.unlockPrivateMessages || selectedRiff.unlockBackstageContent) && (
                                                     <div className="bg-emerald-500/20 px-2 py-1 rounded text-xs text-emerald-300 border border-emerald-500/30">
                                                         Unlockable
                                                     </div>
@@ -1210,7 +1261,7 @@ export default function MarketPage() {
                                                 <h4 className="text-sm font-medium text-orange-100 mb-2 font-serif">Description</h4>
                                                 <p className="text-sm text-orange-200/70">
                                                     {selectedRiff.description ||
-                                                        `This is a sample description for ${selectedRiff.title} by ${selectedRiff.artist}. In a real app, this would contain details about the riff, its inspiration, and any other relevant information provided by the artist.`}
+                                                        `This is a sample description for ${selectedRiff.title} by ${selectedRiff.creator.name}. In a real app, this would contain details about the riff, its inspiration, and any other relevant information provided by the artist.`}
                                                 </p>
                                             </div>
 
@@ -1222,11 +1273,11 @@ export default function MarketPage() {
                                                     </p>
                                                 </div>
 
-                                                {selectedRiff.stakable && (
+                                                {selectedRiff.isStakable && (
                                                     <div className="mt-2 pt-2 border-t border-orange-900/30">
                                                         <div className="flex items-center justify-between mb-1">
                                                             <h4 className="text-xs text-orange-200/70">Staking Rewards</h4>
-                                                            <p className="text-xs text-orange-200/70">10% of royalties</p>
+                                                            <p className="text-xs text-orange-200/70">{selectedRiff.stakingRoyaltyShare}% of royalties</p>
                                                         </div>
                                                         <div className="flex items-center justify-between">
                                                             <h4 className="text-xs text-orange-200/70">Lock Period</h4>
@@ -1245,7 +1296,7 @@ export default function MarketPage() {
                                                     </Button>
                                                 </motion.div>
 
-                                                {selectedRiff.stakable && (
+                                                {selectedRiff.isStakable && (
                                                     <motion.div className="flex-1" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                                                         <Button
                                                             variant="outline"
@@ -1310,7 +1361,7 @@ export default function MarketPage() {
                                 transition={{ duration: 8, ease: "linear", repeat: Number.POSITIVE_INFINITY }}
                             >
                                 <Image
-                                    src={currentAudio.image || "/riffblock-logo.png"}
+                                    src={currentAudio.coverImage || "/riffblock-logo.png"}
                                     alt="Now Spinning"
                                     fill
                                     className="object-cover"
@@ -1319,7 +1370,7 @@ export default function MarketPage() {
                             <div className="overflow-hidden">
                                 <p className="text-xs font-medium text-orange-100 truncate">Now Spinning</p>
                                 <p className="text-xs text-orange-200/70 truncate">
-                                    {currentAudio ? `${currentAudio.title} - ${currentAudio.artist}` : "Nothing playing"}
+                                    {currentAudio ? `${currentAudio.title} - ${currentAudio.creator.name}` : "Nothing playing"}
                                 </p>
                             </div>
                             <motion.button
@@ -1371,7 +1422,7 @@ function AlbumCard({ riff, isPlaying, onPlay, onClick, onFlip, isBargain = false
                 <div className="absolute inset-0 vinyl-texture rounded-full m-4 z-0"></div>
 
                 {/* Album art */}
-                <Image src={riff.image || "/placeholder.svg"} alt={riff.title} fill className="object-cover z-10" />
+                <Image src={riff.coverImage || "/placeholder.svg"} alt={riff.title} fill className="object-cover z-10" />
 
                 {/* Vinyl record edge peeking out */}
                 <div className="absolute left-0 top-0 w-1 h-full bg-black z-20"></div>
@@ -1395,13 +1446,13 @@ function AlbumCard({ riff, isPlaying, onPlay, onClick, onFlip, isBargain = false
 
                 {/* Badges */}
                 <div className="absolute top-2 right-2 flex flex-col gap-1 z-40">
-                    {riff.stakable && (
+                    {riff.isStakable && (
                         <div className="bg-violet-500/80 text-white text-[10px] px-1.5 py-0.5 rounded-sm">Stakable</div>
                     )}
-                    {riff.backstage && (
+                    {riff.unlockBackstageContent && (
                         <div className="bg-orange-500/80 text-white text-[10px] px-1.5 py-0.5 rounded-sm">Backstage</div>
                     )}
-                    {riff.unlockable && (
+                    {(riff.unlockSourceFiles || riff.unlockRemixRights || riff.unlockPrivateMessages || riff.unlockBackstageContent) && (
                         <div className="bg-emerald-500/80 text-white text-[10px] px-1.5 py-0.5 rounded-sm">Unlockable</div>
                     )}
                     {isBargain && (
@@ -1413,7 +1464,7 @@ function AlbumCard({ riff, isPlaying, onPlay, onClick, onFlip, isBargain = false
                 <div className="absolute bottom-0 left-0 right-0 p-2 z-40">
                     <h4 className="text-sm font-medium text-orange-100 truncate">{riff.title}</h4>
                     <div className="flex items-center justify-between">
-                        <p className="text-xs text-orange-200/70 truncate">{riff.artist}</p>
+                        <p className="text-xs text-orange-200/70 truncate">{riff.creator.name}</p>
                         <p className="text-xs font-medium text-orange-400">
                             {riff.price} {riff.currency}
                         </p>

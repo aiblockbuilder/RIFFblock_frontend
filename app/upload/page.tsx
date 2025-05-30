@@ -466,37 +466,43 @@ export default function UploadPage() {
 
     // Render step indicator
     const renderStepIndicator = () => {
+        // Filter out skipped steps to get the list of visible steps
+        const visibleSteps = Object.values(STEPS)
+            .filter((step) => typeof step === "number")
+            .filter((step) => {
+                // Skip staking step if not minting or staking disabled
+                if (step === STEPS.STAKING && (uploadType === "just-upload" || !enableStaking)) {
+                    return false // Exclude this step
+                }
+                return true // Include this step
+            })
+
         return (
             <div className="flex justify-center mb-8">
                 <div className="flex items-center space-x-2">
-                    {Object.values(STEPS)
-                        .filter((step) => typeof step === "number")
-                        .map((step) => {
-                            // Skip staking step if not minting or staking disabled
-                            if (step === STEPS.STAKING && (uploadType === "just-upload" || !enableStaking)) {
-                                return null
-                            }
+                    {visibleSteps.map((step, index) => {
+                        const isActive = currentStep === step
+                        const isCompleted = currentStep > step
+                        const displayedStepNumber = index + 1
 
-                            const isActive = currentStep === step
-                            const isCompleted = currentStep > step
-
-                            return (
-                                <div key={step} className="flex items-center">
-                                    <div
-                                        className={`w-8 h-8 rounded-full flex items-center justify-center ${isActive
-                                            ? "bg-violet-500 text-white"
-                                            : isCompleted
-                                                ? "bg-green-500 text-white"
-                                                : "bg-zinc-800 text-zinc-400"
-                                            }`}
-                                    >
-                                        {isCompleted ? <Check className="h-4 w-4" /> : <span>{step + 1}</span>}
-                                    </div>
-
-                                    {step < 4 && <div className={`w-8 h-0.5 ${isCompleted ? "bg-green-500" : "bg-zinc-800"}`}></div>}
+                        return (
+                            <div key={step} className="flex items-center">
+                                <div
+                                    className={`w-8 h-8 rounded-full flex items-center justify-center ${isActive
+                                        ? "bg-violet-500 text-white"
+                                        : isCompleted
+                                            ? "bg-green-500 text-white"
+                                            : "bg-zinc-800 text-zinc-400"
+                                        }`}
+                                >
+                                    {isCompleted ? <Check className="h-4 w-4" /> : <span>{displayedStepNumber}</span>}
                                 </div>
-                            )
-                        })}
+
+                                {/* Render connector line only if it's not the last visible step */}
+                                {index < visibleSteps.length - 1 && <div className={`w-8 h-0.5 ${isCompleted ? "bg-green-500" : "bg-zinc-800"}`}></div>}
+                            </div>
+                        )
+                    })}
                 </div>
             </div>
         )
