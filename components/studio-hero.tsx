@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Play, Pause, Rewind, FastForward } from "lucide-react"
 import WalletConnect from "@/components/wallet-connect"
 import { userApi, nftApi } from "@/lib/api-client"
+import { toast } from "@/components/ui/use-toast"
 
 interface MostTippedProfile {
   name: string
@@ -19,18 +20,52 @@ interface RiffNFT {
   name: string
   artist: string
   image: string
-  waveform: string
+  audioFile: string
   stakedAmount: number
+  duration: number
 }
 
 export default function StudioHero() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
   const [playbackMode, setPlaybackMode] = useState<"newest" | "random">("newest")
   const [featuredArtist, setFeaturedArtist] = useState<MostTippedProfile | null>(null)
   const [topRiffNFT, setTopRiffNFT] = useState<RiffNFT | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isRiffLoading, setIsRiffLoading] = useState(true)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  // Initialize audio element
+  useEffect(() => {
+    audioRef.current = new Audio()
+    
+    // Add event listeners
+    audioRef.current.addEventListener('timeupdate', () => {
+      if (audioRef.current) {
+        setCurrentTime(audioRef.current.currentTime)
+      }
+    })
+
+    audioRef.current.addEventListener('loadedmetadata', () => {
+      if (audioRef.current) {
+        setDuration(audioRef.current.duration)
+      }
+    })
+
+    audioRef.current.addEventListener('ended', () => {
+      setIsPlaying(false)
+      setCurrentTime(0)
+    })
+
+    // Cleanup
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.src = ''
+      }
+    }
+  }, [])
 
   // Fetch most tipped profile
   useEffect(() => {
@@ -64,14 +99,23 @@ export default function StudioHero() {
           ? nftApi.getLatestRiff() 
           : nftApi.getRandomRiff())
         setTopRiffNFT(response)
+        
+        // If we have an audio file and the audio element is ready
+        if (response.audioFile && audioRef.current) {
+          audioRef.current.src = response.audioFile
+          // Reset playback state
+          setIsPlaying(false)
+          setCurrentTime(0)
+        }
       } catch (error) {
         console.error(`Error fetching ${playbackMode} riff:`, error)
         setTopRiffNFT({
           name: "Quantum Pulse",
           artist: "CyberSoul",
           image: "/nft.png",
-          waveform: "/wave-pattern.png",
+          audioFile: "/wave-pattern.png",
           stakedAmount: 156000,
+          duration: 180
         })
       } finally {
         setIsRiffLoading(false)
@@ -81,29 +125,24 @@ export default function StudioHero() {
     fetchRiff()
   }, [playbackMode])
 
-  // Simulate playback
-  useEffect(() => {
-    let interval: NodeJS.Timeout
+  // Handle play/pause
+  const togglePlay = () => {
+    if (!audioRef.current || !topRiffNFT?.audioFile) return
 
     if (isPlaying) {
-      interval = setInterval(() => {
-        setCurrentTime((prev) => {
-          const newTime = prev + 0.1
-          if (newTime >= 30) {
-            setIsPlaying(false)
-            return 0
-          }
-          return newTime
+      audioRef.current.pause()
+    } else {
+      audioRef.current.play().catch(error => {
+        console.error("Error playing audio:", error)
+        toast({
+          title: "Error",
+          description: "Failed to play audio. Please try again.",
+          variant: "destructive",
         })
-
-        // Move waveform position for animation effect
-      }, 100)
+      })
     }
-
-    return () => {
-      if (interval) clearInterval(interval)
-    }
-  }, [isPlaying])
+    setIsPlaying(!isPlaying)
+  }
 
   // Format time display (mm:ss)
   const formatTime = (seconds: number) => {
@@ -112,20 +151,33 @@ export default function StudioHero() {
     return `${mins}:${secs.toString().padStart(2, "0")}`
   }
 
-  // Skip forward by 10 seconds
+  // Skip forward by 5 seconds
   const handleSkipForward = () => {
-    setCurrentTime((prev) => {
-      const newTime = Math.min(prev + 10, 30) // 30 seconds is the max duration
-      return newTime
-    })
+    if (!audioRef.current) return
+    const newTime = Math.min(audioRef.current.currentTime + 5, duration)
+    audioRef.current.currentTime = newTime
+    setCurrentTime(newTime)
   }
 
-  // Skip backward by 10 seconds
+  // Skip backward by 5 seconds
   const handleSkipBackward = () => {
-    setCurrentTime((prev) => {
-      const newTime = Math.max(prev - 10, 0) // 0 seconds is the min duration
-      return newTime
-    })
+    if (!audioRef.current) return
+    const newTime = Math.max(audioRef.current.currentTime - 5, 0)
+    audioRef.current.currentTime = newTime
+    setCurrentTime(newTime)
+  }
+
+  // Handle seeking in the progress bar
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!audioRef.current) return
+    
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const percentage = x / rect.width
+    const newTime = percentage * duration
+    
+    audioRef.current.currentTime = newTime
+    setCurrentTime(newTime)
   }
 
   return (
@@ -309,7 +361,7 @@ export default function StudioHero() {
                 {/* Play/Pause button */}
                 <button
                   className="w-10 h-10 rounded-full bg-gradient-to-r from-violet-600 to-blue-500 hover:from-violet-700 hover:to-blue-600 flex items-center justify-center transition-colors shadow-lg shadow-violet-900/30"
-                  onClick={() => setIsPlaying(!isPlaying)}
+                  onClick={togglePlay}
                   aria-label={isPlaying ? "Pause" : "Play"}
                 >
                   {isPlaying ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}
@@ -345,12 +397,15 @@ export default function StudioHero() {
               <div className="absolute bottom-2 left-36 right-4">
                 <div className="flex items-center justify-between text-xs text-zinc-400 mb-1 ml-8">
                   <span>{formatTime(currentTime)}</span>
-                  <span>2:30</span>
+                  <span>{formatTime(duration)}</span>
                 </div>
-                <div className="h-1 bg-zinc-800/50 backdrop-blur-sm rounded-full overflow-hidden">
+                <div 
+                  className="h-1 bg-zinc-800/50 backdrop-blur-sm rounded-full overflow-hidden cursor-pointer"
+                  onClick={handleSeek}
+                >
                   <div
                     className="h-full bg-gradient-to-r from-violet-500 to-blue-500 transition-all"
-                    style={{ width: `${(currentTime / 30) * 100}%` }}
+                    style={{ width: `${(currentTime / duration) * 100}%` }}
                   ></div>
                 </div>
               </div>

@@ -145,6 +145,31 @@ export const nftApi = {
     getLatestRiff: () => apiClient(`/riffs/latest`),
     getRandomRiff: () => apiClient(`/riffs/random`),
 
+    getAllRiffs: (params: {
+        genre?: string;
+        mood?: string;
+        instrument?: string;
+        priceMin?: number;
+        priceMax?: number;
+        stakable?: boolean;
+        backstage?: boolean;
+        unlockable?: boolean;
+        sortBy?: string;
+        limit?: number;
+        offset?: number;
+    }) => {
+        const queryParams = new URLSearchParams();
+        
+        // Add all non-undefined parameters to query string
+        Object.entries(params).forEach(([key, value]) => {
+            if (value !== undefined) {
+                queryParams.append(key, value.toString());
+            }
+        });
+
+        return apiClient(`/riffs?${queryParams.toString()}`);
+    },
+
     // Add other NFT-related API calls
 }
 
