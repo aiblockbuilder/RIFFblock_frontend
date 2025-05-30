@@ -38,11 +38,11 @@ export default function WaveformVisualizer({
                     const newAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
                     const newAnalyser = newAudioContext.createAnalyser();
                     newAnalyser.fftSize = 2048;
-                    newAnalyser.smoothingTimeConstant = 0.1;
+            newAnalyser.smoothingTimeConstant = 0.1;
 
                     if (isMounted) {
-                        audioContextRef.current = newAudioContext;
-                        analyserRef.current = newAnalyser;
+            audioContextRef.current = newAudioContext;
+            analyserRef.current = newAnalyser;
                     } else {
                         // Clean up if component unmounted during initialization
                         newAudioContext.close();
@@ -57,20 +57,20 @@ export default function WaveformVisualizer({
                         } catch (e) {
                             console.error("Failed to resume AudioContext:", e);
                         }
-                    }
-                    window.removeEventListener('click', resumeContext);
-                    window.removeEventListener('touchstart', resumeContext);
-                };
+                }
+                window.removeEventListener('click', resumeContext);
+                window.removeEventListener('touchstart', resumeContext);
+            };
 
-                window.addEventListener('click', resumeContext);
-                window.addEventListener('touchstart', resumeContext);
+            window.addEventListener('click', resumeContext);
+            window.addEventListener('touchstart', resumeContext);
 
-            } catch (err) {
+        } catch (err) {
                 console.error("Failed to create audio context:", err);
                 if (isMounted) {
                     setError("Your browser doesn't support audio visualization");
                 }
-            }
+        }
         };
 
         initializeAudioContext();
@@ -88,7 +88,7 @@ export default function WaveformVisualizer({
             if (audioContextRef.current) {
                 audioContextRef.current.close().catch(e => console.error("Failed to close AudioContext:", e));
                 audioContextRef.current = null;
-            }
+        }
 
             // Clean up analyser
             analyserRef.current = null;
@@ -101,29 +101,29 @@ export default function WaveformVisualizer({
         
         const processAudio = async () => {
             if (!audioUrl || !audioContextRef.current || !isMounted) {
-                setWaveformBuffer(null);
-                setIsLoading(false);
-                return;
-            }
+            setWaveformBuffer(null);
+            setIsLoading(false);
+            return;
+        }
 
             setIsLoading(true);
             setError(null);
-            setWaveformBuffer(null);
+        setWaveformBuffer(null);
 
             try {
-                // Clean up previous sources/animations
-                if (animationRef.current) {
-                    cancelAnimationFrame(animationRef.current);
-                    animationRef.current = null;
-                }
-                if (sourceNodeRef.current) {
-                    sourceNodeRef.current.disconnect();
-                    sourceNodeRef.current = null;
-                }
-                if (audioRef.current) {
-                    audioRef.current.pause();
-                    audioRef.current.src = '';
-                }
+        // Clean up previous sources/animations
+        if (animationRef.current) {
+            cancelAnimationFrame(animationRef.current);
+            animationRef.current = null;
+        }
+        if (sourceNodeRef.current) {
+            sourceNodeRef.current.disconnect();
+            sourceNodeRef.current = null;
+        }
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.src = '';
+        }
 
                 // Fetch audio file
                 const response = await fetch(audioUrl);
@@ -151,15 +151,15 @@ export default function WaveformVisualizer({
                 }
 
                 if (isMounted) {
-                    setWaveformBuffer(filteredData);
-                    setIsLoading(false);
+                setWaveformBuffer(filteredData);
+                setIsLoading(false);
                 }
 
             } catch (err) {
                 console.error("Error processing audio file:", err);
                 if (isMounted) {
-                    setError("Failed to load or process audio file.");
-                    setIsLoading(false);
+                setError("Failed to load or process audio file.");
+                setIsLoading(false);
                 }
             }
         };
