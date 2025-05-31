@@ -194,3 +194,15 @@ export const collectionApi = {
 
     // Add other collection-related API calls
 }
+
+// Favorite API
+export const favoriteApi = {
+  addToFavorites: (riffId: number, walletAddress: string) =>
+    apiClient("/favorites/add", { method: "POST", body: { id: riffId, walletAddress } }),
+
+  removeFromFavorites: (riffId: number, walletAddress: string) =>
+    apiClient(`/favorites/remove/${riffId}/${walletAddress}`, { method: "POST" }),
+
+  checkFavorite: (riffId: number, walletAddress: string) =>
+    apiClient(`/favorites/check/${riffId}/${walletAddress}`),
+};
