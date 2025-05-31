@@ -36,6 +36,8 @@ import VerticalLineWaveform from "@/components/vertical-line-waveform"
 import StringLights from "@/components/string-lights"
 import { nftApi } from "@/lib/api-client"
 import { toast } from "@/components/ui/use-toast"
+import { useWallet } from "@/contexts/wallet-context";
+import { favoriteApi } from "@/lib/api-client";
 
 // Import mock data only for featured artists
 import { featuredArtists } from "@/data/market-data"
@@ -116,6 +118,7 @@ export default function MarketPage() {
     const [currentPage, setCurrentPage] = useState(0)
     const riffsPerPage = 20
     const [recentUploads, setRecentUploads] = useState<Riff[]>([])
+    const [isCurrentRiffFavorite, setIsCurrentRiffFavorite] = useState(false);
 
     const audioRef = useRef<HTMLAudioElement>(null)
     const ambienceRef = useRef<HTMLAudioElement>(null)
@@ -123,6 +126,7 @@ export default function MarketPage() {
     const pathname = usePathname()
     const shelfRefs = useRef<Record<string, HTMLDivElement | null>>({})
     const filterSidebarRef = useRef<HTMLDivElement>(null)
+    const { walletAddress, isConnected } = useWallet();
 
     // Group featured artists by category
     const artistsByCategory = featuredArtists.reduce<Record<string, Artist[]>>((acc, artist) => {
@@ -469,6 +473,63 @@ export default function MarketPage() {
             document.removeEventListener("mousedown", handleClickOutside)
         }
     }, [showFilters])
+
+    // Check favorite status when riff is selected
+    useEffect(() => {
+      async function checkFavoriteStatus() {
+        if (selectedRiff && walletAddress) {
+          try {
+            const response = await favoriteApi.checkFavorite(selectedRiff.id, walletAddress);
+            setIsCurrentRiffFavorite(response.isFavorite);
+          } catch (error) {
+            console.error("Error checking favorite status:", error);
+            // Optionally handle the error, e.g., set isCurrentRiffFavorite to false
+          }
+        }
+      }
+      checkFavoriteStatus();
+    }, [selectedRiff, walletAddress]); // Re-run when selectedRiff or walletAddress changes
+
+    // Handle toggling favorite status
+    const handleFavoriteToggle = async () => {
+        if (!selectedRiff || !walletAddress || !isConnected) {
+            toast({
+                title: "Wallet Required",
+                description: "Connect your wallet to favorite riffs.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        try {
+            if (isCurrentRiffFavorite) {
+                // Remove from favorites
+                await favoriteApi.removeFromFavorites(selectedRiff.id, walletAddress);
+                toast({
+                    title: "Removed from Favorites",
+                    description: `${selectedRiff.title} removed from your favorites.`,
+                    variant: "default",
+                });
+                setIsCurrentRiffFavorite(false);
+            } else {
+                // Add to favorites
+                await favoriteApi.addToFavorites(selectedRiff.id, walletAddress);
+                toast({
+                    title: "Added to Favorites",
+                    description: `${selectedRiff.title} added to your favorites!`,
+                    variant: "default",
+                });
+                setIsCurrentRiffFavorite(true);
+            }
+        } catch (error) {
+            console.error("Error toggling favorite status:", error);
+            toast({
+                title: "Error",
+                description: "Failed to update favorites. Please try again.",
+                variant: "destructive",
+            });
+        }
+    };
 
     return (
         <MainLayout>
@@ -1385,7 +1446,7 @@ export default function MarketPage() {
                                         {/* Right side - Details and actions */}
                                         <div>
                                             <h3 className="text-xl font-bold text-orange-100 mb-1 font-serif">{selectedRiff.title}</h3>
-                                            <Link href={`/profile/${selectedRiff.creatorId}`} className="text-orange-400 hover:underline">
+                                            <Link href={`/profile/${selectedRiff.creator.walletAddress}`} className="text-orange-400 hover:underline">
                                                 {selectedRiff.creator.name}
                                             </Link>
 
@@ -1476,8 +1537,12 @@ export default function MarketPage() {
                                                         variant="ghost"
                                                         size="icon"
                                                         className="text-orange-200 hover:text-orange-100 hover:bg-orange-900/30"
+                                                        onClick={handleFavoriteToggle}
                                                     >
-                                                        <Heart size={18} />
+                                                        <Heart
+                                                            size={18}
+                                                            className={isCurrentRiffFavorite ? "text-red-500 fill-red-500" : "text-orange-200"}
+                                                        />
                                                     </Button>
                                                 </motion.div>
 
