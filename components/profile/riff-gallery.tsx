@@ -138,7 +138,7 @@ export default function RiffGallery({ isOwner, isEditing, walletAddress }: RiffG
                             <SelectItem value="tips">Most Tips</SelectItem>
                         </SelectContent>
                     </Select>
-                    {isOwner && (
+                    {/* {isOwner && (
                         <Button 
                             className="bg-violet-600 hover:bg-violet-700"
                             onClick={handleUploadClick}
@@ -146,7 +146,7 @@ export default function RiffGallery({ isOwner, isEditing, walletAddress }: RiffG
                             <Plus className="mr-2 h-4 w-4" />
                             Upload Riff
                         </Button>
-                    )}
+                    )} */}
                 </div>
             </div>
 
