@@ -98,13 +98,13 @@ export default function ProfilePage({ params }: PageProps) {
                         />
 
                         {/* Upload Riff Button (only for owner) */}
-                        {isOwner && (
+                        {/* {isOwner && (
                             <div className="mt-4 text-center">
                                 <Button className="bg-violet-600 hover:bg-violet-700" onClick={() => router.push('/upload')}>
                                     + Upload New Riff
                                 </Button>
                             </div>
-                        )}
+                        )} */}
 
                         {/* Main Content */}
                         <div className="mt-8">
