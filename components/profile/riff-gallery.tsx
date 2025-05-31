@@ -36,7 +36,7 @@ export default function RiffGallery({ isOwner, isEditing, walletAddress }: RiffG
     useEffect(() => {
         // Create audio element
         audioRef.current = new Audio()
-        
+
         // Add event listeners
         audioRef.current.addEventListener('ended', () => {
             setPlayingRiff(null)
@@ -138,15 +138,15 @@ export default function RiffGallery({ isOwner, isEditing, walletAddress }: RiffG
                             <SelectItem value="tips">Most Tips</SelectItem>
                         </SelectContent>
                     </Select>
-                    {/* {isOwner && (
-                        <Button 
+                    {isOwner && (
+                        <Button
                             className="bg-violet-600 hover:bg-violet-700"
                             onClick={handleUploadClick}
                         >
                             <Plus className="mr-2 h-4 w-4" />
                             Upload Riff
                         </Button>
-                    )} */}
+                    )}
                 </div>
             </div>
 
