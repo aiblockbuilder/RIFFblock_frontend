@@ -98,19 +98,19 @@ export const userApi = {
     getUserActivity: (walletAddress: string, page = 0, limit = 5) =>
         apiClient(`/users/profile/${walletAddress}/activity?page=${page}&limit=${limit}`),
 
-    getUserTippingTiers: (walletAddress: string) => apiClient(`/tipping/tiers/${walletAddress}`),
+    getUserTippingTiers: (walletAddress: string) => apiClient(`/tipping-tiers/tiers/${walletAddress}`),
 
     getUserFavorites: (walletAddress: string, page = 0, limit = 10) =>
         apiClient(`/users/profile/${walletAddress}/favorites?page=${page}&limit=${limit}`),
 
     createTippingTier: (walletAddress: string, tierData: Omit<TippingTier, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) =>
-        apiClient(`/tipping/tiers`, { method: "POST", body: { walletAddress, ...tierData } }),
+        apiClient(`/tipping-tiers/tiers`, { method: "POST", body: { walletAddress, ...tierData } }),
 
     updateTippingTier: (tierId: number, tierData: Partial<TippingTier>) =>
-        apiClient(`/tipping/tiers/${tierId}`, { method: "PUT", body: tierData }),
+        apiClient(`/tipping-tiers/tiers/${tierId}`, { method: "PUT", body: tierData }),
 
     deleteTippingTier: (tierId: number) =>
-        apiClient(`/tipping/tiers/${tierId}`, { method: "DELETE" }),
+        apiClient(`/tipping-tiers/tiers/${tierId}`, { method: "DELETE" }),
 
     getStakingSettings: (walletAddress: string) => apiClient(`/users/profile/${walletAddress}/staking-settings`, { walletAddress }),
 
