@@ -206,3 +206,22 @@ export const favoriteApi = {
   checkFavorite: (riffId: number, walletAddress: string) =>
     apiClient(`/favorites/check/${riffId}/${walletAddress}`),
 };
+
+// Stake API
+export const stakeApi = {
+  stakeOnNft: (nftId: number, walletAddress: string, amount: number) =>
+    apiClient(`/stakes/stake/${nftId}/${walletAddress}`, { 
+      method: "POST", 
+      body: { amount },
+      walletAddress 
+    }),
+
+  unstakeFromNft: (nftId: number, walletAddress: string) =>
+    apiClient(`/stakes/unstake/${nftId}/${walletAddress}`, { 
+      method: "POST",
+      walletAddress 
+    }),
+
+  getNftStakingInfo: (nftId: number) =>
+    apiClient(`/stakes/${nftId}`),
+};
