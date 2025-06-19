@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 import {
     Search,
     Filter,
@@ -29,6 +30,7 @@ import {
     ChevronLeft,
     ChevronRight,
     X,
+    Info,
 } from "lucide-react"
 import WalletConnect from "@/components/wallet-connect"
 import MainLayout from "@/components/layouts/main-layout"
@@ -37,7 +39,15 @@ import StringLights from "@/components/string-lights"
 import { nftApi } from "@/lib/api-client"
 import { toast } from "@/components/ui/use-toast"
 import { useWallet } from "@/contexts/wallet-context";
-import { favoriteApi } from "@/lib/api-client";
+import { favoriteApi, stakeApi } from "@/lib/api-client";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog"
 
 // Import mock data only for featured artists
 import { featuredArtists } from "@/data/market-data"
@@ -119,6 +129,11 @@ export default function MarketPage() {
     const riffsPerPage = 20
     const [recentUploads, setRecentUploads] = useState<Riff[]>([])
     const [isCurrentRiffFavorite, setIsCurrentRiffFavorite] = useState(false);
+    
+    // Stake modal state
+    const [showStakingModal, setShowStakingModal] = useState(false)
+    const [stakeAmount, setStakeAmount] = useState("500")
+    const [isProcessing, setIsProcessing] = useState(false)
 
     const audioRef = useRef<HTMLAudioElement>(null)
     const ambienceRef = useRef<HTMLAudioElement>(null)
@@ -530,6 +545,64 @@ export default function MarketPage() {
             });
         }
     };
+
+    // Handle stake amount change
+    const handleStakeAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value.replace(/[^0-9.]/g, "")
+        setStakeAmount(value)
+    }
+
+    // Handle stake on riff
+    const handleStakeOnRiff = async () => {
+        if (!isConnected || !walletAddress) {
+            toast({
+                title: "Wallet Connection Required",
+                description: "Please connect your wallet to stake on riffs.",
+                variant: "destructive",
+            })
+            return
+        }
+
+        if (!selectedRiff) {
+            toast({
+                title: "No Riff Selected",
+                description: "Please select a riff to stake on.",
+                variant: "destructive",
+            })
+            return
+        }
+
+        const stakeAmountNum = Number.parseFloat(stakeAmount)
+        if (isNaN(stakeAmountNum) || stakeAmountNum <= 0) {
+            toast({
+                title: "Invalid Stake Amount",
+                description: "Please enter a valid stake amount.",
+                variant: "destructive",
+            })
+            return
+        }
+
+        setIsProcessing(true)
+
+        try {
+            await stakeApi.stakeOnNft(selectedRiff.id, walletAddress, stakeAmountNum)
+            
+            setShowStakingModal(false)
+            toast({
+                title: "Staking Successful",
+                description: `You have successfully staked ${stakeAmount} RIFF on "${selectedRiff.title}".`,
+            })
+        } catch (error) {
+            console.error("Error staking on riff:", error)
+            toast({
+                title: "Staking Failed",
+                description: "Failed to stake on this riff. Please try again.",
+                variant: "destructive",
+            })
+        } finally {
+            setIsProcessing(false)
+        }
+    }
 
     return (
         <MainLayout>
@@ -1521,15 +1594,122 @@ export default function MarketPage() {
                                                 </motion.div>
 
                                                 {selectedRiff.isStakable && (
-                                                    <motion.div className="flex-1" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                                                        <Button
-                                                            variant="outline"
-                                                            className="w-full border-orange-700/50 text-orange-200 hover:text-orange-100 hover:bg-orange-900/30"
-                                                        >
-                                                            <Sparkles size={16} className="mr-2" />
-                                                            Stake
-                                                        </Button>
-                                                    </motion.div>
+                                                    <Dialog
+                                                        open={showStakingModal}
+                                                        onOpenChange={(open) => {
+                                                            if (!open) setShowStakingModal(false)
+                                                        }}
+                                                    >
+                                                        <DialogTrigger asChild>
+                                                            <motion.div className="flex-1" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    className="w-full border-orange-700/50 text-orange-200 hover:text-orange-100 hover:bg-orange-900/30"
+                                                                    onClick={() => {
+                                                                        setStakeAmount("500")
+                                                                        setShowStakingModal(true)
+                                                                    }}
+                                                                >
+                                                                    <Sparkles size={16} className="mr-2" />
+                                                                    Stake
+                                                                </Button>
+                                                            </motion.div>
+                                                        </DialogTrigger>
+                                                        <DialogContent className="bg-stone-900 border-orange-800/30">
+                                                            <DialogHeader>
+                                                                <DialogTitle className="text-orange-100">Stake on "{selectedRiff.title}"</DialogTitle>
+                                                                <DialogDescription className="text-orange-200/70">
+                                                                    Stake your RIFF tokens to earn {selectedRiff.stakingRoyaltyShare}% of future royalties.
+                                                                </DialogDescription>
+                                                            </DialogHeader>
+
+                                                            <div className="space-y-4 py-4">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="relative w-12 h-12 rounded-lg overflow-hidden">
+                                                                        <Image
+                                                                            src={selectedRiff.coverImage || "/placeholder.svg"}
+                                                                            alt={selectedRiff.title}
+                                                                            fill
+                                                                            className="object-cover"
+                                                                        />
+                                                                    </div>
+                                                                    <div>
+                                                                        <h4 className="font-medium text-orange-100">{selectedRiff.title}</h4>
+                                                                        <p className="text-sm text-orange-200/70">by {selectedRiff.creator.name}</p>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="space-y-2">
+                                                                    <Label htmlFor="stake-amount" className="text-orange-200">Stake Amount (RIFF)</Label>
+                                                                    <Input
+                                                                        id="stake-amount"
+                                                                        type="text"
+                                                                        value={stakeAmount}
+                                                                        onChange={handleStakeAmountChange}
+                                                                        className="bg-stone-800 border-orange-800/30 text-orange-100"
+                                                                    />
+                                                                    <p className="text-xs text-orange-200/50">
+                                                                        Minimum stake: 100 RIFF • Maximum stake: 10,000 RIFF
+                                                                    </p>
+                                                                </div>
+
+                                                                <div className="bg-stone-800/50 p-4 rounded-lg space-y-3 border border-orange-800/20">
+                                                                    <div className="flex justify-between text-sm">
+                                                                        <span className="text-orange-200/70">Your Stake</span>
+                                                                        <span className="text-orange-100">{stakeAmount} RIFF</span>
+                                                                    </div>
+                                                                    <div className="flex justify-between text-sm">
+                                                                        <span className="text-orange-200/70">Royalty Share</span>
+                                                                        <span className="text-orange-100">{selectedRiff.stakingRoyaltyShare}%</span>
+                                                                    </div>
+                                                                    <div className="flex justify-between text-sm">
+                                                                        <span className="text-orange-200/70">Lock Period</span>
+                                                                        <span className="text-orange-100">90 days</span>
+                                                                    </div>
+                                                                    <div className="flex justify-between text-sm font-medium pt-2 border-t border-orange-800/30">
+                                                                        <span className="text-orange-200/70">Estimated Share</span>
+                                                                        <span className="text-orange-400">
+                                                                            {(
+                                                                                (Number.parseInt(stakeAmount) /
+                                                                                    (10000 + Number.parseInt(stakeAmount))) *
+                                                                                100
+                                                                            ).toFixed(2)}
+                                                                            % of Staker Pool
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="flex items-center gap-2 text-sm text-orange-200/70">
+                                                                    <Info className="h-4 w-4" />
+                                                                    <p>Staked tokens are locked for 90 days and cannot be withdrawn early.</p>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex justify-end gap-3">
+                                                                <Button
+                                                                    variant="outline"
+                                                                    className="border-orange-800/30 text-orange-200 hover:text-orange-100 hover:bg-orange-900/30"
+                                                                    onClick={() => setShowStakingModal(false)}
+                                                                >
+                                                                    Cancel
+                                                                </Button>
+                                                                <Button
+                                                                    className="bg-orange-700 hover:bg-orange-800"
+                                                                    onClick={handleStakeOnRiff}
+                                                                    disabled={isProcessing}
+                                                                >
+                                                                    {isProcessing ? (
+                                                                        <div className="flex items-center gap-2">
+                                                                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-b-transparent border-white"></div>
+                                                                            <span>Processing...</span>
+                                                                        </div>
+                                                                    ) : (
+                                                                        "Confirm Stake"
+                                                                    )}
+                                                                </Button>
+                                                            </div>
+                                                        </DialogContent>
+                                                    </Dialog>
                                                 )}
 
                                                 <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
@@ -1673,7 +1853,6 @@ function AlbumCard({ riff, isPlaying, onPlay, onClick, onFlip, isBargain = false
                     onClick={onPlay}
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
-                    style={{ transformOrigin: "center" }}
                 >
                     {isPlaying ? <Pause size={20} className="text-white" /> : <Play size={20} className="text-white" />}
                 </motion.button>
