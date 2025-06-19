@@ -224,4 +224,7 @@ export const stakeApi = {
 
   getNftStakingInfo: (nftId: number) =>
     apiClient(`/stakes/${nftId}`),
+
+  getUserStakedRiffs: (walletAddress: string) =>
+    apiClient(`/stakes/user/${walletAddress}`),
 };
