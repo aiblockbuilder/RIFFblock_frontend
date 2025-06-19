@@ -164,3 +164,15 @@ export interface StakingSettings {
     updatedAt: string;
 }
 
+export interface StakedRiff {
+    id: string;
+    title: string;
+    artist: string;
+    image: string;
+    stakedAmount: number;
+    stakedDate: string;
+    unlockDate: string;
+    royaltiesEarned: number;
+    status: "locked" | "unlocked";
+}
+

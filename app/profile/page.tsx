@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useWallet } from "@/contexts/wallet-context"
 // import { useAuth } from "@/hooks/use-auth"
-import { userApi } from "@/lib/api-client"
+import { userApi, stakeApi } from "@/lib/api-client"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Music, Users, Settings, Edit, Save, Coins, Gift, DollarSign, Unlock, Lock, Clock, Info, ExternalLink } from "lucide-react"
@@ -18,7 +18,7 @@ import FavoriteRiffs from "@/components/profile/favorite-riffs"
 import MainLayout from "@/components/layouts/main-layout"
 import CreativeGradientBackground from "@/components/creative-gradient-background"
 import WalletConnect from "@/components/wallet-connect"
-import { UpdateProfileData, UserProfile } from "@/types/api-response"
+import { UpdateProfileData, UserProfile, StakedRiff } from "@/types/api-response"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import Image from "next/image"
 
@@ -30,6 +30,8 @@ export default function ProfilePage() {
     const [activeTab, setActiveTab] = useState("music")
     const [profile, setProfile] = useState<UserProfile>()
     const [isLoading, setIsLoading] = useState(true)
+    const [stakedRiffs, setStakedRiffs] = useState<StakedRiff[]>([])
+    const [isLoadingStakes, setIsLoadingStakes] = useState(false)
 
     // Fetch user profile data
     useEffect(() => {
@@ -74,6 +76,33 @@ export default function ProfilePage() {
             setProfile(response)
         }
     }
+
+    // Fetch user staked riffs
+    const fetchStakedRiffs = async () => {
+        if (!walletAddress) return
+
+        setIsLoadingStakes(true)
+        try {
+            const response = await stakeApi.getUserStakedRiffs(walletAddress)
+            setStakedRiffs(response)
+        } catch (error) {
+            console.error("Error fetching staked riffs:", error)
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Failed to load staked riffs data",
+            })
+        } finally {
+            setIsLoadingStakes(false)
+        }
+    }
+
+    // Fetch staked riffs when support tab is active or wallet changes
+    useEffect(() => {
+        if (activeTab === "support" && walletAddress) {
+            fetchStakedRiffs()
+        }
+    }, [activeTab, walletAddress])
 
     if (!isConnected) {
         return (
@@ -239,28 +268,28 @@ export default function ProfilePage() {
                                             {[
                                                 {
                                                     title: "Total Staked",
-                                                    value: "2,250",
+                                                    value: stakedRiffs.reduce((sum, riff) => sum + riff.stakedAmount, 0).toLocaleString(),
                                                     unit: "RIFF",
                                                     icon: Coins,
                                                     color: "violet",
                                                 },
                                                 {
                                                     title: "Total Tips Given",
-                                                    value: "850",
+                                                    value: "850", // TODO: Get from backend
                                                     unit: "RIFF",
                                                     icon: Gift,
                                                     color: "blue",
                                                 },
                                                 {
                                                     title: "Royalties Earned",
-                                                    value: "136.6",
+                                                    value: stakedRiffs.reduce((sum, riff) => sum + riff.royaltiesEarned, 0).toFixed(1),
                                                     unit: "RIFF",
                                                     icon: DollarSign,
                                                     color: "green",
                                                 },
                                                 {
                                                     title: "Unlocked Content",
-                                                    value: "5",
+                                                    value: stakedRiffs.filter(riff => riff.status === "unlocked").length.toString(),
                                                     unit: "items",
                                                     icon: Unlock,
                                                     color: "indigo",
@@ -291,142 +320,126 @@ export default function ProfilePage() {
                                         <div className="bg-zinc-900/50 backdrop-blur-sm border border-zinc-800 rounded-xl p-6">
                                             <h3 className="text-xl font-bold mb-4">Your Staked Riffs</h3>
 
-                                            <div className="overflow-x-auto">
-                                                <table className="w-full">
-                                                    <thead>
-                                                        <tr className="border-b border-zinc-800">
-                                                            <th className="text-left py-3 px-4 text-zinc-400 font-medium">Riff</th>
-                                                            <th className="text-left py-3 px-4 text-zinc-400 font-medium">Artist</th>
-                                                            <th className="text-right py-3 px-4 text-zinc-400 font-medium">Staked</th>
-                                                            <th className="text-right py-3 px-4 text-zinc-400 font-medium">Royalties</th>
-                                                            <th className="text-right py-3 px-4 text-zinc-400 font-medium">Status</th>
-                                                            <th className="text-right py-3 px-4 text-zinc-400 font-medium">Actions</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {[
-                                                            {
-                                                                id: "staked-1",
-                                                                title: "Neon Cascade",
-                                                                artist: "SYNTHWAVE_92",
-                                                                image: "/synthwave-album-cover-1.jpg",
-                                                                stakedAmount: 1000,
-                                                                stakedDate: "2023-12-15",
-                                                                unlockDate: "2024-03-15",
-                                                                royaltiesEarned: 45.8,
-                                                                status: "locked",
-                                                            },
-                                                            {
-                                                                id: "staked-2",
-                                                                title: "Digital Dreams",
-                                                                artist: "ElectroVibe",
-                                                                image: "/placeholder.svg?height=400&width=400&query=synthwave+album+cover+5",
-                                                                stakedAmount: 500,
-                                                                stakedDate: "2023-11-10",
-                                                                unlockDate: "2024-02-10",
-                                                                royaltiesEarned: 28.3,
-                                                                status: "locked",
-                                                            },
-                                                            {
-                                                                id: "staked-3",
-                                                                title: "Analog Sunset",
-                                                                artist: "RetroWave",
-                                                                image: "/placeholder.svg?height=400&width=400&query=synthwave+album+cover+6",
-                                                                stakedAmount: 750,
-                                                                stakedDate: "2023-10-05",
-                                                                unlockDate: "2024-01-05",
-                                                                royaltiesEarned: 62.5,
-                                                                status: "unlocked",
-                                                            },
-                                                        ].map((riff) => (
-                                                            <tr key={riff.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/20">
-                                                                <td className="py-3 px-4">
-                                                                    <div className="flex items-center gap-3">
-                                                                        <div className="relative w-10 h-10 rounded-md overflow-hidden">
-                                                                            <Image
-                                                                                src={riff.image || "/placeholder.svg"}
-                                                                                alt={riff.title}
-                                                                                fill
-                                                                                className="object-cover"
-                                                                            />
+                                            {isLoadingStakes ? (
+                                                <div className="flex items-center justify-center py-8">
+                                                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-violet-500 border-t-transparent"></div>
+                                                </div>
+                                            ) : stakedRiffs.length === 0 ? (
+                                                <div className="text-center py-8">
+                                                    <p className="text-zinc-400 mb-4">You haven't staked on any riffs yet.</p>
+                                                    <Button 
+                                                        className="bg-violet-600 hover:bg-violet-700"
+                                                        onClick={() => router.push('/market')}
+                                                    >
+                                                        Browse Riffs to Stake
+                                                    </Button>
+                                                </div>
+                                            ) : (
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full">
+                                                        <thead>
+                                                            <tr className="border-b border-zinc-800">
+                                                                <th className="text-left py-3 px-4 text-zinc-400 font-medium">Riff</th>
+                                                                <th className="text-left py-3 px-4 text-zinc-400 font-medium">Artist</th>
+                                                                <th className="text-right py-3 px-4 text-zinc-400 font-medium">Staked</th>
+                                                                <th className="text-right py-3 px-4 text-zinc-400 font-medium">Royalties</th>
+                                                                <th className="text-right py-3 px-4 text-zinc-400 font-medium">Status</th>
+                                                                <th className="text-right py-3 px-4 text-zinc-400 font-medium">Actions</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {stakedRiffs.map((riff) => (
+                                                                <tr key={riff.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/20">
+                                                                    <td className="py-3 px-4">
+                                                                        <div className="flex items-center gap-3">
+                                                                            <div className="relative w-10 h-10 rounded-md overflow-hidden">
+                                                                                <Image
+                                                                                    src={riff.image || "/placeholder.svg"}
+                                                                                    alt={riff.title}
+                                                                                    fill
+                                                                                    className="object-cover"
+                                                                                />
+                                                                            </div>
+                                                                            <span className="font-medium">{riff.title}</span>
                                                                         </div>
-                                                                        <span className="font-medium">{riff.title}</span>
-                                                                    </div>
-                                                                </td>
-                                                                <td className="py-3 px-4 text-zinc-300">{riff.artist}</td>
-                                                                <td className="py-3 px-4 text-right">
-                                                                    <span className="font-medium">{riff.stakedAmount.toLocaleString()}</span>
-                                                                    <span className="text-zinc-500 text-sm ml-1">RIFF</span>
-                                                                </td>
-                                                                <td className="py-3 px-4 text-right">
-                                                                    <span className="font-medium text-green-400">{riff.royaltiesEarned.toLocaleString()}</span>
-                                                                    <span className="text-zinc-500 text-sm ml-1">RIFF</span>
-                                                                </td>
-                                                                <td className="py-3 px-4 text-right">
-                                                                    {riff.status === "locked" ? (
-                                                                        <div className="flex items-center justify-end gap-1 text-zinc-400">
-                                                                            <Lock className="h-4 w-4" />
+                                                                    </td>
+                                                                    <td className="py-3 px-4 text-zinc-300">{riff.artist}</td>
+                                                                    <td className="py-3 px-4 text-right">
+                                                                        <span className="font-medium">{riff.stakedAmount.toLocaleString()}</span>
+                                                                        <span className="text-zinc-500 text-sm ml-1">RIFF</span>
+                                                                    </td>
+                                                                    <td className="py-3 px-4 text-right">
+                                                                        <span className="font-medium text-green-400">{riff.royaltiesEarned.toFixed(1)}</span>
+                                                                        <span className="text-zinc-500 text-sm ml-1">RIFF</span>
+                                                                    </td>
+                                                                    <td className="py-3 px-4 text-right">
+                                                                        {riff.status === "locked" ? (
+                                                                            <div className="flex items-center justify-end gap-1 text-zinc-400">
+                                                                                <Lock className="h-4 w-4" />
+                                                                                <TooltipProvider>
+                                                                                    <Tooltip>
+                                                                                        <TooltipTrigger asChild>
+                                                                                            <span>Locked</span>
+                                                                                        </TooltipTrigger>
+                                                                                        <TooltipContent className="bg-zinc-900 border-zinc-800">
+                                                                                            <p>Unlocks on {new Date(riff.unlockDate).toLocaleDateString()}</p>
+                                                                                        </TooltipContent>
+                                                                                    </Tooltip>
+                                                                                </TooltipProvider>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="flex items-center justify-end gap-1 text-green-400">
+                                                                                <Unlock className="h-4 w-4" />
+                                                                                <span>Unlocked</span>
+                                                                            </div>
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="py-3 px-4 text-right">
+                                                                        {riff.status === "locked" ? (
                                                                             <TooltipProvider>
                                                                                 <Tooltip>
                                                                                     <TooltipTrigger asChild>
-                                                                                        <span>Locked</span>
+                                                                                        <div className="flex items-center justify-end gap-1 text-zinc-400">
+                                                                                            <Clock className="h-4 w-4" />
+                                                                                            <span>
+                                                                                                {Math.ceil(
+                                                                                                    (new Date(riff.unlockDate).getTime() - new Date().getTime()) /
+                                                                                                    (1000 * 60 * 60 * 24),
+                                                                                                )}{" "}
+                                                                                                days
+                                                                                            </span>
+                                                                                        </div>
                                                                                     </TooltipTrigger>
                                                                                     <TooltipContent className="bg-zinc-900 border-zinc-800">
-                                                                                        <p>Unlocks on {new Date(riff.unlockDate).toLocaleDateString()}</p>
+                                                                                        <p>Time remaining until you can unstake</p>
                                                                                     </TooltipContent>
                                                                                 </Tooltip>
                                                                             </TooltipProvider>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <div className="flex items-center justify-end gap-1 text-green-400">
-                                                                            <Unlock className="h-4 w-4" />
-                                                                            <span>Unlocked</span>
-                                                                        </div>
-                                                                    )}
-                                                                </td>
-                                                                <td className="py-3 px-4 text-right">
-                                                                    {riff.status === "locked" ? (
-                                                                        <TooltipProvider>
-                                                                            <Tooltip>
-                                                                                <TooltipTrigger asChild>
-                                                                                    <div className="flex items-center justify-end gap-1 text-zinc-400">
-                                                                                        <Clock className="h-4 w-4" />
-                                                                                        <span>
-                                                                                            {Math.ceil(
-                                                                                                (new Date(riff.unlockDate).getTime() - new Date().getTime()) /
-                                                                                                (1000 * 60 * 60 * 24),
-                                                                                            )}{" "}
-                                                                                            days
-                                                                                        </span>
-                                                                                    </div>
-                                                                                </TooltipTrigger>
-                                                                                <TooltipContent className="bg-zinc-900 border-zinc-800">
-                                                                                    <p>Time remaining until you can unstake</p>
-                                                                                </TooltipContent>
-                                                                            </Tooltip>
-                                                                        </TooltipProvider>
-                                                                    ) : (
-                                                                        <Button size="sm" className="bg-violet-600 hover:bg-violet-700">
-                                                                            Unstake
-                                                                        </Button>
-                                                                    )}
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-
-                                            <div className="flex justify-between items-center mt-6">
-                                                <div className="flex items-center gap-2 text-zinc-400">
-                                                    <Info className="h-4 w-4" />
-                                                    <p className="text-sm">Royalties are distributed monthly based on your stake percentage.</p>
+                                                                        ) : (
+                                                                            <Button size="sm" className="bg-violet-600 hover:bg-violet-700">
+                                                                                Unstake
+                                                                            </Button>
+                                                                        )}
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
                                                 </div>
-                                                <Button className="bg-green-600 hover:bg-green-700">
-                                                    Claim Royalties
-                                                    <DollarSign className="ml-2 h-4 w-4" />
-                                                </Button>
-                                            </div>
+                                            )}
+
+                                            {stakedRiffs.length > 0 && (
+                                                <div className="flex justify-between items-center mt-6">
+                                                    <div className="flex items-center gap-2 text-zinc-400">
+                                                        <Info className="h-4 w-4" />
+                                                        <p className="text-sm">Royalties are distributed monthly based on your stake percentage.</p>
+                                                    </div>
+                                                    <Button className="bg-green-600 hover:bg-green-700">
+                                                        Claim Royalties
+                                                        <DollarSign className="ml-2 h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </TabsContent>
