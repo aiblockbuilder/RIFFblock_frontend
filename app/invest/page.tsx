@@ -47,6 +47,11 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import CreativeGradientBackground from "@/components/creative-gradient-background"
+import { nftApi } from "@/lib/api-client"
+import { StakableRiff } from "@/types/api-response"
+import { stakeApi } from "@/lib/api-client"
+import { tipApi } from "@/lib/api-client"
+import { TippingTierWithArtist } from "@/types/api-response"
 
 export default function InvestPage() {
     const { isConnected, walletAddress } = useWallet()
@@ -64,6 +69,10 @@ export default function InvestPage() {
     const [tipAmount, setTipAmount] = useState("100")
     const [playingRiff, setPlayingRiff] = useState<string | null>(null)
     const [expandedFAQ, setExpandedFAQ] = useState<string | null>(null)
+    const [stakableRiffs, setStakableRiffs] = useState<StakableRiff[]>([])
+    const [isLoadingStakableRiffs, setIsLoadingStakableRiffs] = useState(false)
+    const [tippingTiers, setTippingTiers] = useState<TippingTierWithArtist[]>([])
+    const [isLoadingTippingTiers, setIsLoadingTippingTiers] = useState(false)
 
     // Calculate RIFF amount based on fiat amount
     useEffect(() => {
@@ -115,8 +124,8 @@ export default function InvestPage() {
     }
 
     // Handle stake on riff
-    const handleStakeOnRiff = () => {
-        if (!isConnected) {
+    const handleStakeOnRiff = async () => {
+        if (!isConnected || !walletAddress) {
             toast({
                 title: "Wallet Connection Required",
                 description: "Please connect your wallet to stake on riffs.",
@@ -125,22 +134,81 @@ export default function InvestPage() {
             return
         }
 
+        if (!selectedRiff) {
+            toast({
+                title: "No Riff Selected",
+                description: "Please select a riff to stake on.",
+                variant: "destructive",
+            })
+            return
+        }
+
+        const stakeAmountNum = Number.parseFloat(stakeAmount)
+        if (isNaN(stakeAmountNum) || stakeAmountNum <= 0) {
+            toast({
+                title: "Invalid Stake Amount",
+                description: "Please enter a valid stake amount.",
+                variant: "destructive",
+            })
+            return
+        }
+
+        // Extract the riff ID from the selectedRiff.id (format: "riff-{id}")
+        const riffId = Number.parseInt(selectedRiff.id.replace("riff-", ""))
+
+        console.log("Staking with:", {
+            riffId,
+            walletAddress,
+            amount: stakeAmountNum,
+            selectedRiff
+        })
+
         setIsProcessing(true)
 
-        // Simulate processing
-        setTimeout(() => {
-            setIsProcessing(false)
+        try {
+            await stakeApi.stakeOnNft(riffId, walletAddress, stakeAmountNum)
+            
             setShowStakingModal(false)
             toast({
                 title: "Staking Successful",
-                description: `You have successfully staked ${stakeAmount} RIFF on "${selectedRiff?.title}".`,
+                description: `You have successfully staked ${stakeAmount} RIFF on "${selectedRiff.title}".`,
             })
-        }, 2000)
+            
+            // Refresh the stakable riffs to update the staked amounts
+            fetchStakableRiffs()
+        } catch (error: any) {
+            console.error("Error staking on riff:", error)
+            
+            // Handle specific error cases
+            let errorMessage = "Failed to stake on this riff. Please try again."
+            
+            if (error.message.includes("User already has a stake")) {
+                errorMessage = "You already have a stake on this riff. You can only stake once per riff."
+            } else if (error.message.includes("Riff is not stakable")) {
+                errorMessage = "This riff is not available for staking."
+            } else if (error.message.includes("Cannot stake on your own riff")) {
+                errorMessage = "You cannot stake on your own riffs. Please select a riff from another artist."
+            } else if (error.message.includes("User not found")) {
+                errorMessage = "User profile not found. Please create a profile first."
+            } else if (error.message.includes("Riff not found")) {
+                errorMessage = "Riff not found. Please try again."
+            } else if (error.message.includes("amount")) {
+                errorMessage = "Invalid stake amount. Please enter a valid number."
+            }
+            
+            toast({
+                title: "Staking Failed",
+                description: errorMessage,
+                variant: "destructive",
+            })
+        } finally {
+            setIsProcessing(false)
+        }
     }
 
     // Handle tip artist
-    const handleTipArtist = () => {
-        if (!isConnected) {
+    const handleTipArtist = async () => {
+        if (!isConnected || !walletAddress) {
             toast({
                 title: "Wallet Connection Required",
                 description: "Please connect your wallet to tip artists.",
@@ -149,17 +217,89 @@ export default function InvestPage() {
             return
         }
 
+        if (!selectedTier) {
+            toast({
+                title: "No Tier Selected",
+                description: "Please select a tipping tier.",
+                variant: "destructive",
+            })
+            return
+        }
+
+        // Check if user is trying to tip themselves
+        if (walletAddress.toLowerCase() === selectedTier.artistWalletAddress?.toLowerCase()) {
+            toast({
+                title: "Cannot Tip Yourself",
+                description: "You cannot tip your own tipping tiers. Please select a tier from another artist.",
+                variant: "destructive",
+            })
+            return
+        }
+
+        const tipAmountNum = Number.parseFloat(tipAmount)
+        if (isNaN(tipAmountNum) || tipAmountNum < selectedTier.amount) {
+            toast({
+                title: "Invalid Tip Amount",
+                description: `Minimum tip amount for ${selectedTier.name} tier is ${selectedTier.amount} RIFF.`,
+                variant: "destructive",
+            })
+            return
+        }
+
         setIsProcessing(true)
 
-        // Simulate processing
-        setTimeout(() => {
-            setIsProcessing(false)
+        try {
+            // Check if we have the artist's wallet address
+            if (!selectedTier.artistWalletAddress) {
+                toast({
+                    title: "Tip Failed",
+                    description: "Artist wallet address not found. Please try again later.",
+                    variant: "destructive",
+                })
+                return
+            }
+
+            const tipData = {
+                senderWalletAddress: walletAddress,
+                recipientWalletAddress: selectedTier.artistWalletAddress,
+                amount: tipAmountNum,
+                currency: "RIFF",
+                message: `Tip for ${selectedTier.name} tier access`,
+                tierId: selectedTier.id,
+                riffId: undefined // No specific riff for this tip
+            }
+
+            await tipApi.sendTip(tipData)
+            
             setShowTipModal(false)
             toast({
                 title: "Tip Successful",
-                description: `You have successfully tipped ${tipAmount} RIFF to ${selectedTier?.artist}.`,
+                description: `You have successfully tipped ${tipAmount} RIFF to ${selectedTier.artist} for ${selectedTier.name} tier access.`,
             })
-        }, 2000)
+        } catch (error: any) {
+            console.error("Error sending tip:", error)
+            
+            // Handle specific error cases
+            let errorMessage = "Failed to send tip. Please try again."
+            
+            if (error.message.includes("Sender not found")) {
+                errorMessage = "Your wallet address was not found. Please create a profile first."
+            } else if (error.message.includes("Recipient not found")) {
+                errorMessage = "Artist profile not found. Please try again."
+            } else if (error.message.includes("Cannot tip yourself")) {
+                errorMessage = "You cannot tip your own tipping tiers. Please select a tier from another artist."
+            } else if (error.message.includes("amount")) {
+                errorMessage = "Invalid tip amount. Please enter a valid number."
+            }
+            
+            toast({
+                title: "Tip Failed",
+                description: errorMessage,
+                variant: "destructive",
+            })
+        } finally {
+            setIsProcessing(false)
+        }
     }
 
     // Toggle play/pause for a riff
@@ -171,124 +311,47 @@ export default function InvestPage() {
         }
     }
 
-    // Mock data for featured riffs
-    const featuredRiffs = [
-        {
-            id: "riff-1",
-            title: "Neon Cascade",
-            artist: "SYNTHWAVE_92",
-            artistImage: "/neon-profile.png",
-            image: "/synthwave-album-cover-1.jpg",
-            stakedAmount: 12500,
-            maxPool: 50000,
-            royaltyShare: 15,
-            duration: "0:32",
-        },
-        {
-            id: "riff-2",
-            title: "Midnight Drive",
-            artist: "RetroWave",
-            artistImage: "/retro-profile.png",
-            image: "/placeholder.svg?key=gp6yl",
-            stakedAmount: 8750,
-            maxPool: 25000,
-            royaltyShare: 20,
-            duration: "0:45",
-        },
-        {
-            id: "riff-3",
-            title: "Cyber Dawn",
-            artist: "NightDrive",
-            artistImage: "/cyberpunk-profile.png",
-            image: "/synthwave-album-cover-3.jpg",
-            stakedAmount: 15000,
-            maxPool: 30000,
-            royaltyShare: 12,
-            duration: "0:38",
-        },
-        {
-            id: "riff-4",
-            title: "Quantum Pulse",
-            artist: "CyberSoul",
-            artistImage: "/futuristic-profile.png",
-            image: "/placeholder.svg?key=5ryzf",
-            stakedAmount: 5000,
-            maxPool: 20000,
-            royaltyShare: 25,
-            duration: "0:29",
-        },
-    ]
+    // Fetch stakable riffs
+    const fetchStakableRiffs = async () => {
+        setIsLoadingStakableRiffs(true)
+        try {
+            const response = await nftApi.getStakableRiffs()
+            setStakableRiffs(response)
+        } catch (error) {
+            console.error("Error fetching stakable riffs:", error)
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Failed to load stakable riffs",
+            })
+        } finally {
+            setIsLoadingStakableRiffs(false)
+        }
+    }
 
-    // Mock data for tipping tiers
-    const tippingTiers = [
-        {
-            id: "tier-1",
-            artist: "SYNTHWAVE_92",
-            artistImage: "/neon-profile.png",
-            name: "Supporter",
-            amount: 100,
-            description: "Access to exclusive behind-the-scenes content and early previews of upcoming riffs.",
-            perks: ["Exclusive updates", "Early access to new riffs"],
-            image: "/placeholder.svg?key=vt3jl",
-        },
-        {
-            id: "tier-2",
-            artist: "RetroWave",
-            artistImage: "/retro-profile.png",
-            name: "Enthusiast",
-            amount: 250,
-            description: "All previous perks plus access to private livestreams and unreleased demo riffs.",
-            perks: ["Private livestreams", "Unreleased demos", "Monthly Q&A"],
-            image: "/placeholder.svg?height=200&width=200&query=synthwave+badge+2",
-        },
-        {
-            id: "tier-3",
-            artist: "CyberSoul",
-            artistImage: "/futuristic-profile.png",
-            name: "Patron",
-            amount: 500,
-            description: "All previous perks plus personalized feedback on your own music and exclusive collaborations.",
-            perks: ["Personalized feedback", "Exclusive collaborations", "Discord role"],
-            image: "/placeholder.svg?height=200&width=200&query=synthwave+badge+3",
-        },
-    ]
+    // Fetch tipping tiers
+    const fetchTippingTiers = async () => {
+        setIsLoadingTippingTiers(true)
+        try {
+            const response = await tipApi.getAllTippingTiers()
+            setTippingTiers(response)
+        } catch (error) {
+            console.error("Error fetching tipping tiers:", error)
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Failed to load tipping tiers",
+            })
+        } finally {
+            setIsLoadingTippingTiers(false)
+        }
+    }
 
-    // Mock data for user's staked riffs
-    const userStakedRiffs = [
-        {
-            id: "staked-1",
-            title: "Neon Cascade",
-            artist: "SYNTHWAVE_92",
-            image: "/synthwave-album-cover-1.jpg",
-            stakedAmount: 1000,
-            stakedDate: "2023-12-15",
-            unlockDate: "2024-03-15",
-            royaltiesEarned: 45.8,
-            status: "locked",
-        },
-        {
-            id: "staked-2",
-            title: "Digital Dreams",
-            artist: "ElectroVibe",
-            image: "/placeholder.svg?height=400&width=400&query=synthwave+album+cover+5",
-            stakedAmount: 500,
-            stakedDate: "2023-11-10",
-            unlockDate: "2024-02-10",
-            royaltiesEarned: 28.3,
-            status: "locked",
-        },
-        {
-            id: "staked-3",
-            title: "Analog Sunset",
-            artist: "RetroWave",
-            image: "/placeholder.svg?height=400&width=400&query=synthwave+album+cover+6",
-            stakedAmount: 750,
-            stakedDate: "2023-10-05",
-            unlockDate: "2024-01-05",
-            royaltiesEarned: 62.5,
-            status: "unlocked",
-        },
-    ]
+    // Fetch stakable riffs on component mount
+    useEffect(() => {
+        fetchStakableRiffs()
+        fetchTippingTiers()
+    }, [])
 
     // FAQ data
     const faqItems = [
@@ -699,188 +762,222 @@ export default function InvestPage() {
                         </p>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                        {featuredRiffs.map((riff) => (
-                            <motion.div
-                                key={riff.id}
-                                className="bg-zinc-900/50 backdrop-blur-sm border border-zinc-800 rounded-xl overflow-hidden hover:border-violet-500/30 transition-all group"
-                                initial={{ opacity: 0, y: 20 }}
-                                whileInView={{ opacity: 1, y: 0 }}
-                                viewport={{ once: true }}
-                                transition={{ duration: 0.4 }}
+                    {isLoadingStakableRiffs ? (
+                        <div className="flex justify-center py-12">
+                            <div className="animate-spin rounded-full h-12 w-12 border-4 border-violet-500 border-t-transparent"></div>
+                        </div>
+                    ) : stakableRiffs.length === 0 ? (
+                        <div className="text-center py-12">
+                            <p className="text-zinc-400 mb-4">No stakable riffs available at the moment.</p>
+                            <Button 
+                                className="bg-violet-600 hover:bg-violet-700"
+                                onClick={() => window.location.href = '/market'}
                             >
-                                <div className="relative aspect-square">
-                                    <Image src={riff.image || "/placeholder.svg"} alt={riff.title} fill className="object-cover" />
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                        <button
-                                            className="w-12 h-12 rounded-full bg-violet-600/90 hover:bg-violet-700/90 flex items-center justify-center transition-all transform scale-90 group-hover:scale-100"
-                                            onClick={() => togglePlay(riff.id)}
-                                        >
-                                            {playingRiff === riff.id ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 ml-0.5" />}
-                                        </button>
-                                    </div>
-                                    <div className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/60 backdrop-blur-sm rounded text-xs text-zinc-300">
-                                        {riff.duration}
-                                    </div>
-                                </div>
-
-                                <div className="p-4">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <div className="relative w-6 h-6 rounded-full overflow-hidden">
-                                            <Image
-                                                src={riff.artistImage || "/placeholder.svg"}
-                                                alt={riff.artist}
-                                                fill
-                                                className="object-cover"
-                                            />
-                                        </div>
-                                        <Link href="#" className="text-sm text-zinc-400 hover:text-violet-400 truncate">
-                                            {riff.artist}
-                                        </Link>
-                                    </div>
-
-                                    <h3 className="font-bold text-lg mb-2 truncate">{riff.title}</h3>
-
-                                    <div className="space-y-3">
-                                        <div>
-                                            <div className="flex justify-between text-xs text-zinc-500 mb-1">
-                                                <span>Staked</span>
-                                                <span>
-                                                    {riff.stakedAmount.toLocaleString()} / {riff.maxPool.toLocaleString()} RIFF
-                                                </span>
-                                            </div>
-                                            <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                                                <div
-                                                    className="h-full bg-violet-500 rounded-full"
-                                                    style={{ width: `${(riff.stakedAmount / riff.maxPool) * 100}%` }}
-                                                ></div>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex justify-between items-center">
-                                            <div className="bg-violet-500/20 px-2 py-1 rounded text-xs text-violet-300">
-                                                {riff.royaltyShare}% Royalty Share
-                                            </div>
-                                            <Dialog
-                                                open={showStakingModal && selectedRiff?.id === riff.id}
-                                                onOpenChange={(open) => {
-                                                    if (!open) setShowStakingModal(false)
-                                                }}
+                                Browse All Riffs
+                            </Button>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                            {stakableRiffs.map((riff) => (
+                                <motion.div
+                                    key={riff.id}
+                                    className="bg-zinc-900/50 backdrop-blur-sm border border-zinc-800 rounded-xl overflow-hidden hover:border-violet-500/30 transition-all group"
+                                    initial={{ opacity: 0, y: 20 }}
+                                    whileInView={{ opacity: 1, y: 0 }}
+                                    viewport={{ once: true }}
+                                    transition={{ duration: 0.4 }}
+                                >
+                                    <div className="relative aspect-square">
+                                        <Image src={riff.image || "/placeholder.svg"} alt={riff.title} fill className="object-cover" />
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                            <button
+                                                className="w-12 h-12 rounded-full bg-violet-600/90 hover:bg-violet-700/90 flex items-center justify-center transition-all transform scale-90 group-hover:scale-100"
+                                                onClick={() => togglePlay(riff.id)}
                                             >
-                                                <DialogTrigger asChild>
-                                                    <Button
-                                                        size="sm"
-                                                        className="bg-violet-600 hover:bg-violet-700"
-                                                        onClick={() => {
-                                                            setSelectedRiff(riff)
-                                                            setShowStakingModal(true)
-                                                        }}
-                                                    >
-                                                        Stake
-                                                    </Button>
-                                                </DialogTrigger>
-                                                <DialogContent className="bg-zinc-900 border-zinc-800">
-                                                    <DialogHeader>
-                                                        <DialogTitle>Stake on "{riff.title}"</DialogTitle>
-                                                        <DialogDescription>
-                                                            Stake your RIFF tokens to earn {riff.royaltyShare}% of future royalties.
-                                                        </DialogDescription>
-                                                    </DialogHeader>
+                                                {playingRiff === riff.id ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 ml-0.5" />}
+                                            </button>
+                                        </div>
+                                        <div className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/60 backdrop-blur-sm rounded text-xs text-zinc-300">
+                                            {riff.duration}
+                                        </div>
+                                    </div>
 
-                                                    <div className="space-y-4 py-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="relative w-12 h-12 rounded-lg overflow-hidden">
-                                                                <Image
-                                                                    src={riff.image || "/placeholder.svg"}
-                                                                    alt={riff.title}
-                                                                    fill
-                                                                    className="object-cover"
-                                                                />
-                                                            </div>
-                                                            <div>
-                                                                <h4 className="font-medium">{riff.title}</h4>
-                                                                <p className="text-sm text-zinc-400">by {riff.artist}</p>
-                                                            </div>
-                                                        </div>
+                                    <div className="p-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <div className="relative w-6 h-6 rounded-full overflow-hidden">
+                                                <Image
+                                                    src={riff.artistImage || "/placeholder.svg"}
+                                                    alt={riff.artist}
+                                                    fill
+                                                    className="object-cover"
+                                                />
+                                            </div>
+                                            <Link href="#" className="text-sm text-zinc-400 hover:text-violet-400 truncate">
+                                                {riff.artist}
+                                            </Link>
+                                        </div>
 
-                                                        <div className="space-y-2">
-                                                            <Label htmlFor="stake-amount">Stake Amount (RIFF)</Label>
-                                                            <Input
-                                                                id="stake-amount"
-                                                                type="text"
-                                                                value={stakeAmount}
-                                                                onChange={handleStakeAmountChange}
-                                                                className="bg-zinc-800 border-zinc-700"
-                                                            />
-                                                            <p className="text-xs text-zinc-500">
-                                                                Minimum stake: 100 RIFF • Maximum stake:{" "}
-                                                                {riff.maxPool - riff.stakedAmount} RIFF
-                                                            </p>
-                                                        </div>
+                                        <h3 className="font-bold text-lg mb-2 truncate">{riff.title}</h3>
 
-                                                        <div className="bg-zinc-800/50 p-4 rounded-lg space-y-3">
-                                                            <div className="flex justify-between text-sm">
-                                                                <span className="text-zinc-400">Your Stake</span>
-                                                                <span>{stakeAmount} RIFF</span>
-                                                            </div>
-                                                            <div className="flex justify-between text-sm">
-                                                                <span className="text-zinc-400">Royalty Share</span>
-                                                                <span>{riff.royaltyShare}%</span>
-                                                            </div>
-                                                            <div className="flex justify-between text-sm">
-                                                                <span className="text-zinc-400">Lock Period</span>
-                                                                <span>90 days</span>
-                                                            </div>
-                                                            <div className="flex justify-between text-sm font-medium pt-2 border-t border-zinc-700">
-                                                                <span>Estimated Share</span>
-                                                                <span className="text-violet-400">
-                                                                    {(
-                                                                        (Number.parseInt(stakeAmount) /
-                                                                            (riff.stakedAmount + Number.parseInt(stakeAmount))) *
-                                                                        100
-                                                                    ).toFixed(2)}
-                                                                    % of Staker Pool
-                                                                </span>
-                                                            </div>
-                                                        </div>
+                                        <div className="space-y-3">
+                                            <div>
+                                                <div className="flex justify-between text-xs text-zinc-500 mb-1">
+                                                    <span>Staked</span>
+                                                    <span>
+                                                        {riff.stakedAmount.toLocaleString()} / {riff.maxPool.toLocaleString()} RIFF
+                                                    </span>
+                                                </div>
+                                                <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full bg-violet-500 rounded-full"
+                                                        style={{ width: `${(riff.stakedAmount / riff.maxPool) * 100}%` }}
+                                                    ></div>
+                                                </div>
+                                            </div>
 
-                                                        <div className="flex items-center gap-2 text-sm text-zinc-400">
-                                                            <Info className="h-4 w-4" />
-                                                            <p>Staked tokens are locked for 90 days and cannot be withdrawn early.</p>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="flex justify-end gap-3">
+                                            <div className="flex justify-between items-center">
+                                                <div className="bg-violet-500/20 px-2 py-1 rounded text-xs text-violet-300">
+                                                    {riff.royaltyShare}% Royalty Share
+                                                </div>
+                                                <Dialog
+                                                    open={showStakingModal && selectedRiff?.id === riff.id}
+                                                    onOpenChange={(open) => {
+                                                        if (!open) setShowStakingModal(false)
+                                                    }}
+                                                >
+                                                    <DialogTrigger asChild>
                                                         <Button
-                                                            variant="outline"
-                                                            className="border-zinc-700 text-zinc-400 hover:text-zinc-300"
-                                                            onClick={() => setShowStakingModal(false)}
+                                                            size="sm"
+                                                            className={`${
+                                                                walletAddress?.toLowerCase() === riff.artistWalletAddress?.toLowerCase()
+                                                                    ? "bg-zinc-600 text-zinc-400 cursor-not-allowed"
+                                                                    : "bg-violet-600 hover:bg-violet-700"
+                                                            }`}
+                                                            onClick={() => {
+                                                                // Don't open modal if it's the user's own riff
+                                                                if (walletAddress?.toLowerCase() === riff.artistWalletAddress?.toLowerCase()) {
+                                                                    toast({
+                                                                        title: "Cannot Stake on Your Own Riff",
+                                                                        description: "You cannot stake on your own riffs. Please select a riff from another artist.",
+                                                                        variant: "destructive",
+                                                                    })
+                                                                    return
+                                                                }
+                                                                setSelectedRiff(riff)
+                                                                setShowStakingModal(true)
+                                                            }}
+                                                            disabled={walletAddress?.toLowerCase() === riff.artistWalletAddress?.toLowerCase()}
                                                         >
-                                                            Cancel
-                                                        </Button>
-                                                        <Button
-                                                            className="bg-violet-600 hover:bg-violet-700"
-                                                            onClick={handleStakeOnRiff}
-                                                            disabled={isProcessing}
-                                                        >
-                                                            {isProcessing ? (
-                                                                <div className="flex items-center gap-2">
-                                                                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-b-transparent border-white"></div>
-                                                                    <span>Processing...</span>
-                                                                </div>
+                                                            {walletAddress?.toLowerCase() === riff.artistWalletAddress?.toLowerCase() ? (
+                                                                "Your Riff"
                                                             ) : (
-                                                                "Confirm Stake"
+                                                                "Stake"
                                                             )}
                                                         </Button>
-                                                    </div>
-                                                </DialogContent>
-                                            </Dialog>
+                                                    </DialogTrigger>
+                                                    <DialogContent className="bg-zinc-900 border-zinc-800">
+                                                        <DialogHeader>
+                                                            <DialogTitle>Stake on "{riff.title}"</DialogTitle>
+                                                            <DialogDescription>
+                                                                Stake your RIFF tokens to earn {riff.royaltyShare}% of future royalties.
+                                                            </DialogDescription>
+                                                        </DialogHeader>
+
+                                                        <div className="space-y-4 py-4">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="relative w-12 h-12 rounded-lg overflow-hidden">
+                                                                    <Image
+                                                                        src={riff.image || "/placeholder.svg"}
+                                                                        alt={riff.title}
+                                                                        fill
+                                                                        className="object-cover"
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <h4 className="font-medium">{riff.title}</h4>
+                                                                    <p className="text-sm text-zinc-400">by {riff.artist}</p>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="space-y-2">
+                                                                <Label htmlFor="stake-amount">Stake Amount (RIFF)</Label>
+                                                                <Input
+                                                                    id="stake-amount"
+                                                                    type="text"
+                                                                    value={stakeAmount}
+                                                                    onChange={handleStakeAmountChange}
+                                                                    className="bg-zinc-800 border-zinc-700"
+                                                                />
+                                                                <p className="text-xs text-zinc-500">
+                                                                    Minimum stake: 100 RIFF • Maximum stake:{" "}
+                                                                    {riff.maxPool - riff.stakedAmount} RIFF
+                                                                </p>
+                                                            </div>
+
+                                                            <div className="bg-zinc-800/50 p-4 rounded-lg space-y-3">
+                                                                <div className="flex justify-between text-sm">
+                                                                    <span className="text-zinc-400">Your Stake</span>
+                                                                    <span>{stakeAmount} RIFF</span>
+                                                                </div>
+                                                                <div className="flex justify-between text-sm">
+                                                                    <span className="text-zinc-400">Royalty Share</span>
+                                                                    <span>{riff.royaltyShare}%</span>
+                                                                </div>
+                                                                <div className="flex justify-between text-sm">
+                                                                    <span className="text-zinc-400">Lock Period</span>
+                                                                    <span>90 days</span>
+                                                                </div>
+                                                                <div className="flex justify-between text-sm font-medium pt-2 border-t border-zinc-700">
+                                                                    <span>Estimated Share</span>
+                                                                    <span className="text-violet-400">
+                                                                        {(
+                                                                            (Number.parseInt(stakeAmount) /
+                                                                                (riff.stakedAmount + Number.parseInt(stakeAmount))) *
+                                                                            100
+                                                                        ).toFixed(2)}
+                                                                        % of Staker Pool
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex items-center gap-2 text-sm text-zinc-400">
+                                                                <Info className="h-4 w-4" />
+                                                                <p>Staked tokens are locked for 90 days and cannot be withdrawn early.</p>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex justify-end gap-3">
+                                                            <Button
+                                                                variant="outline"
+                                                                className="border-zinc-700 text-zinc-400 hover:text-zinc-300"
+                                                                onClick={() => setShowStakingModal(false)}
+                                                            >
+                                                                Cancel
+                                                            </Button>
+                                                            <Button
+                                                                className="bg-violet-600 hover:bg-violet-700"
+                                                                onClick={handleStakeOnRiff}
+                                                                disabled={isProcessing}
+                                                            >
+                                                                {isProcessing ? (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-b-transparent border-white"></div>
+                                                                        <span>Processing...</span>
+                                                                    </div>
+                                                                ) : (
+                                                                    "Confirm Stake"
+                                                                )}
+                                                            </Button>
+                                                        </div>
+                                                    </DialogContent>
+                                                </Dialog>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            </motion.div>
-                        ))}
-                    </div>
+                                </motion.div>
+                            ))}
+                        </div>
+                    )}
 
                     <div className="flex justify-center mt-8">
                         <Button variant="outline" className="border-zinc-700 text-zinc-400 hover:text-zinc-300">
@@ -984,162 +1081,201 @@ export default function InvestPage() {
                         </p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {tippingTiers.map((tier) => (
-                            <motion.div
-                                key={tier.id}
-                                className="bg-zinc-900/50 backdrop-blur-sm border border-zinc-800 rounded-xl overflow-hidden hover:border-violet-500/30 transition-all"
-                                initial={{ opacity: 0, y: 20 }}
-                                whileInView={{ opacity: 1, y: 0 }}
-                                viewport={{ once: true }}
-                                transition={{ duration: 0.4 }}
+                    {isLoadingTippingTiers ? (
+                        <div className="flex justify-center py-12">
+                            <div className="animate-spin rounded-full h-12 w-12 border-4 border-violet-500 border-t-transparent"></div>
+                        </div>
+                    ) : tippingTiers.length === 0 ? (
+                        <div className="text-center py-12">
+                            <p className="text-zinc-400 mb-4">No tipping tiers available at the moment.</p>
+                            <Button 
+                                className="bg-violet-600 hover:bg-violet-700"
+                                onClick={() => window.location.href = '/market'}
                             >
-                                <div className="relative h-40 bg-gradient-to-b from-violet-900/30 to-zinc-900/30">
-                                    <div className="absolute inset-0 flex items-center justify-center">
-                                        <div className="relative w-24 h-24">
-                                            <Image src={tier.image || "/placeholder.svg"} alt={tier.name} fill className="object-contain" />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="p-6">
-                                    <div className="flex items-center gap-3 mb-3">
-                                        <div className="relative w-8 h-8 rounded-full overflow-hidden">
-                                            <Image
-                                                src={tier.artistImage || "/placeholder.svg"}
-                                                alt={tier.artist}
-                                                fill
-                                                className="object-cover"
-                                            />
-                                        </div>
-                                        <Link href="#" className="text-zinc-300 hover:text-violet-400">
-                                            {tier.artist}
-                                        </Link>
-                                    </div>
-
-                                    <div className="flex justify-between items-center mb-4">
-                                        <h3 className="font-bold text-lg">{tier.name}</h3>
-                                        <div className="flex items-center gap-1 text-violet-400 font-medium">
-                                            <Coins className="h-4 w-4" />
-                                            <span>{tier.amount.toLocaleString()}</span>
-                                        </div>
-                                    </div>
-
-                                    <p className="text-sm text-zinc-400 mb-4">{tier.description}</p>
-
-                                    <div className="space-y-2 mb-4">
-                                        {tier.perks.map((perk, index) => (
-                                            <div key={index} className="flex items-center gap-2 text-sm">
-                                                <div className="w-1.5 h-1.5 rounded-full bg-violet-500"></div>
-                                                <span>{perk}</span>
+                                Browse All Artists
+                            </Button>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {tippingTiers.map((tier: TippingTierWithArtist) => (
+                                <motion.div
+                                    key={tier.id}
+                                    className="bg-zinc-900/50 backdrop-blur-sm border border-zinc-800 rounded-xl overflow-hidden hover:border-violet-500/30 transition-all"
+                                    initial={{ opacity: 0, y: 20 }}
+                                    whileInView={{ opacity: 1, y: 0 }}
+                                    viewport={{ once: true }}
+                                    transition={{ duration: 0.4 }}
+                                >
+                                    <div className="relative h-40 bg-gradient-to-b from-violet-900/30 to-zinc-900/30">
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                            <div className="relative w-24 h-24">
+                                                <Image src={tier.image || "/placeholder.svg"} alt={tier.name} fill className="object-contain" />
                                             </div>
-                                        ))}
+                                        </div>
                                     </div>
 
-                                    <Dialog
-                                        open={showTipModal && selectedTier?.id === tier.id}
-                                        onOpenChange={(open) => {
-                                            if (!open) setShowTipModal(false)
-                                        }}
-                                    >
-                                        <DialogTrigger asChild>
-                                            <Button
-                                                className="w-full bg-violet-600 hover:bg-violet-700"
-                                                onClick={() => {
-                                                    setSelectedTier(tier)
-                                                    setTipAmount(tier.amount.toString())
-                                                    setShowTipModal(true)
-                                                }}
-                                            >
-                                                <Gift className="mr-2 h-4 w-4" />
-                                                Tip for Access
-                                            </Button>
-                                        </DialogTrigger>
-                                        <DialogContent className="bg-zinc-900 border-zinc-800">
-                                            <DialogHeader>
-                                                <DialogTitle>Tip {tier.artist}</DialogTitle>
-                                                <DialogDescription>
-                                                    Support this artist and unlock the {tier.name} tier benefits.
-                                                </DialogDescription>
-                                            </DialogHeader>
-
-                                            <div className="space-y-4 py-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="relative w-12 h-12 rounded-full overflow-hidden">
-                                                        <Image
-                                                            src={tier.artistImage || "/placeholder.svg"}
-                                                            alt={tier.artist}
-                                                            fill
-                                                            className="object-cover"
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <h4 className="font-medium">{tier.artist}</h4>
-                                                        <p className="text-sm text-zinc-400">{tier.name} Tier</p>
-                                                    </div>
-                                                </div>
-
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="tip-amount">Tip Amount (RIFF)</Label>
-                                                    <Input
-                                                        id="tip-amount"
-                                                        type="text"
-                                                        value={tipAmount}
-                                                        onChange={handleTipAmountChange}
-                                                        className="bg-zinc-800 border-zinc-700"
-                                                    />
-                                                    <p className="text-xs text-zinc-500">
-                                                        Minimum tip: {tier.amount} RIFF for {tier.name} tier
-                                                    </p>
-                                                </div>
-
-                                                <div className="bg-zinc-800/50 p-4 rounded-lg space-y-2">
-                                                    <h4 className="font-medium">You'll Unlock:</h4>
-                                                    <ul className="space-y-1">
-                                                        {tier.perks.map((perk, index) => (
-                                                            <li key={index} className="flex items-center gap-2 text-sm">
-                                                                <Check className="h-4 w-4 text-green-500" />
-                                                                <span>{perk}</span>
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                </div>
-
-                                                <div className="flex items-center gap-2 text-sm text-zinc-400">
-                                                    <Info className="h-4 w-4" />
-                                                    <p>Tips are non-refundable and go directly to the artist.</p>
-                                                </div>
+                                    <div className="p-6">
+                                        <div className="flex items-center gap-3 mb-3">
+                                            <div className="relative w-8 h-8 rounded-full overflow-hidden">
+                                                <Image
+                                                    src={tier.artistImage || "/placeholder.svg"}
+                                                    alt={tier.artist}
+                                                    fill
+                                                    className="object-cover"
+                                                />
                                             </div>
+                                            <Link href="#" className="text-zinc-300 hover:text-violet-400">
+                                                {tier.artist}
+                                            </Link>
+                                        </div>
 
-                                            <div className="flex justify-end gap-3">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h3 className="font-bold text-lg">{tier.name}</h3>
+                                            <div className="flex items-center gap-1 text-violet-400 font-medium">
+                                                <Coins className="h-4 w-4" />
+                                                <span>{tier.amount.toLocaleString()}</span>
+                                            </div>
+                                        </div>
+
+                                        <p className="text-sm text-zinc-400 mb-4">{tier.description}</p>
+
+                                        <div className="space-y-2 mb-4">
+                                            {tier.perks.map((perk: string, index: number) => (
+                                                <div key={index} className="flex items-center gap-2 text-sm">
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-violet-500"></div>
+                                                    <span>{perk}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <Dialog
+                                            open={showTipModal && selectedTier?.id === tier.id}
+                                            onOpenChange={(open) => {
+                                                if (!open) setShowTipModal(false)
+                                            }}
+                                        >
+                                            <DialogTrigger asChild>
                                                 <Button
-                                                    variant="outline"
-                                                    className="border-zinc-700 text-zinc-400 hover:text-zinc-300"
-                                                    onClick={() => setShowTipModal(false)}
+                                                    className={`w-full ${
+                                                        walletAddress?.toLowerCase() === tier.artistWalletAddress?.toLowerCase()
+                                                            ? "bg-zinc-600 text-zinc-400 cursor-not-allowed"
+                                                            : "bg-violet-600 hover:bg-violet-700"
+                                                    }`}
+                                                    onClick={() => {
+                                                        // Don't open modal if it's the user's own tier
+                                                        if (walletAddress?.toLowerCase() === tier.artistWalletAddress?.toLowerCase()) {
+                                                            toast({
+                                                                title: "Cannot Tip Yourself",
+                                                                description: "You cannot tip your own tipping tiers. Please select a tier from another artist.",
+                                                                variant: "destructive",
+                                                            })
+                                                            return
+                                                        }
+                                                        setSelectedTier(tier)
+                                                        setTipAmount(tier.amount.toString())
+                                                        setShowTipModal(true)
+                                                    }}
+                                                    disabled={walletAddress?.toLowerCase() === tier.artistWalletAddress?.toLowerCase()}
                                                 >
-                                                    Cancel
-                                                </Button>
-                                                <Button
-                                                    className="bg-violet-600 hover:bg-violet-700"
-                                                    onClick={handleTipArtist}
-                                                    disabled={isProcessing}
-                                                >
-                                                    {isProcessing ? (
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-b-transparent border-white"></div>
-                                                            <span>Processing...</span>
-                                                        </div>
+                                                    {walletAddress?.toLowerCase() === tier.artistWalletAddress?.toLowerCase() ? (
+                                                        <>
+                                                            <Lock className="mr-2 h-4 w-4" />
+                                                            Your Tier
+                                                        </>
                                                     ) : (
-                                                        "Confirm Tip"
+                                                        <>
+                                                            <Gift className="mr-2 h-4 w-4" />
+                                                            Tip for Access
+                                                        </>
                                                     )}
                                                 </Button>
-                                            </div>
-                                        </DialogContent>
-                                    </Dialog>
-                                </div>
-                            </motion.div>
-                        ))}
-                    </div>
+                                            </DialogTrigger>
+                                            <DialogContent className="bg-zinc-900 border-zinc-800">
+                                                <DialogHeader>
+                                                    <DialogTitle>Tip {tier.artist}</DialogTitle>
+                                                    <DialogDescription>
+                                                        Support this artist and unlock the {tier.name} tier benefits.
+                                                    </DialogDescription>
+                                                </DialogHeader>
+
+                                                <div className="space-y-4 py-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="relative w-12 h-12 rounded-full overflow-hidden">
+                                                            <Image
+                                                                src={tier.artistImage || "/placeholder.svg"}
+                                                                alt={tier.artist}
+                                                                fill
+                                                                className="object-cover"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="font-medium">{tier.artist}</h4>
+                                                            <p className="text-sm text-zinc-400">{tier.name} Tier</p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor="tip-amount">Tip Amount (RIFF)</Label>
+                                                        <Input
+                                                            id="tip-amount"
+                                                            type="text"
+                                                            value={tipAmount}
+                                                            onChange={handleTipAmountChange}
+                                                            className="bg-zinc-800 border-zinc-700"
+                                                        />
+                                                        <p className="text-xs text-zinc-500">
+                                                            Minimum tip: {tier.amount} RIFF for {tier.name} tier
+                                                        </p>
+                                                    </div>
+
+                                                    <div className="bg-zinc-800/50 p-4 rounded-lg space-y-2">
+                                                        <h4 className="font-medium">You'll Unlock:</h4>
+                                                        <ul className="space-y-1">
+                                                            {tier.perks.map((perk: string, index: number) => (
+                                                                <li key={index} className="flex items-center gap-2 text-sm">
+                                                                    <Check className="h-4 w-4 text-green-500" />
+                                                                    <span>{perk}</span>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2 text-sm text-zinc-400">
+                                                        <Info className="h-4 w-4" />
+                                                        <p>Tips are non-refundable and go directly to the artist.</p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex justify-end gap-3">
+                                                    <Button
+                                                        variant="outline"
+                                                        className="border-zinc-700 text-zinc-400 hover:text-zinc-300"
+                                                        onClick={() => setShowTipModal(false)}
+                                                    >
+                                                        Cancel
+                                                    </Button>
+                                                    <Button
+                                                        className="bg-violet-600 hover:bg-violet-700"
+                                                        onClick={handleTipArtist}
+                                                        disabled={isProcessing}
+                                                    >
+                                                        {isProcessing ? (
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="animate-spin rounded-full h-4 w-4 border-2 border-b-transparent border-white"></div>
+                                                                <span>Processing...</span>
+                                                            </div>
+                                                        ) : (
+                                                            "Confirm Tip"
+                                                        )}
+                                                    </Button>
+                                                </div>
+                                            </DialogContent>
+                                        </Dialog>
+                                    </div>
+                                </motion.div>
+                            ))}
+                        </div>
+                    )}
 
                     <div className="flex justify-center mt-8">
                         <Button variant="outline" className="border-zinc-700 text-zinc-400 hover:text-zinc-300">

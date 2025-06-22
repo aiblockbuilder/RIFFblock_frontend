@@ -153,6 +153,18 @@ export interface TippingTier {
     updatedAt: string;
 }
 
+export interface TippingTierWithArtist {
+    id: number;
+    name: string;
+    amount: number;
+    description: string;
+    perks: string[];
+    artist: string;
+    artistImage: string;
+    artistWalletAddress: string | null;
+    image: string;
+}
+
 export interface StakingSettings {
     id: number;
     userId: number;
@@ -174,5 +186,18 @@ export interface StakedRiff {
     unlockDate: string;
     royaltiesEarned: number;
     status: "locked" | "unlocked";
+}
+
+export interface StakableRiff {
+    id: string;
+    title: string;
+    artist: string;
+    artistImage: string;
+    artistWalletAddress: string;
+    image: string;
+    stakedAmount: number;
+    maxPool: number;
+    royaltyShare: number;
+    duration: string;
 }
 
