@@ -1,6 +1,6 @@
 import axios from "axios"
 import { toast } from "@/components/ui/use-toast"
-import { UpdateProfileData, UserProfile, TippingTier, StakingSettings } from "@/types/api-response"
+import { UpdateProfileData, UserProfile, TippingTier, TippingTierWithArtist, StakingSettings } from "@/types/api-response"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api"
 
@@ -131,6 +131,25 @@ export const userApi = {
     getMostTippedProfile: () => apiClient(`/users/most-tipped`),
 }
 
+// Tip API
+export const tipApi = {
+    getAllTippingTiers: (): Promise<TippingTierWithArtist[]> => apiClient(`/tipping-tiers/tiers`),
+    
+    sendTip: (tipData: {
+        senderWalletAddress: string;
+        recipientWalletAddress: string;
+        amount: number;
+        currency?: string;
+        message?: string;
+        tierId?: number;
+        riffId?: number;
+    }): Promise<{ message: string; tip: any }> => 
+        apiClient(`/tipping-tiers/send`, { 
+            method: "POST", 
+            body: tipData 
+        }),
+}
+
 // NFT API
 export const nftApi = {
     createRiff: (walletAddress: string, formData: FormData) =>
@@ -173,6 +192,9 @@ export const nftApi = {
 
     getRecentRiffs: () => apiClient("/riffs/recent-uploads"),
 
+    // Get stakable riffs for featured section
+    getStakableRiffs: () => apiClient("/riffs/stakable"),
+
     // Add other NFT-related API calls
 }
 
@@ -212,7 +234,7 @@ export const stakeApi = {
   stakeOnNft: (nftId: number, walletAddress: string, amount: number) =>
     apiClient(`/stakes/stake/${nftId}/${walletAddress}`, { 
       method: "POST", 
-      body: { amount },
+      body: { amount: Number(amount) },
       walletAddress 
     }),
 

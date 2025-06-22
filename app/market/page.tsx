@@ -232,7 +232,7 @@ export default function MarketPage() {
     const fetchRecentUploads = async () => {
         try {
             const response = await nftApi.getRecentRiffs(); // Assuming getRecentRiffs calls the new endpoint
-            setRecentUploads(response.riffs);
+            setRecentUploads(response);
         } catch (error) {
             console.error("Error fetching recent uploads:", error);
             toast({
@@ -572,6 +572,15 @@ export default function MarketPage() {
             return
         }
 
+        if (walletAddress?.toLowerCase() === selectedRiff.creator.walletAddress.toLowerCase()) {
+            toast({
+                title: "Cannot Stake on Your Own Riff",
+                description: "You cannot stake on your own creations.",
+                variant: "destructive",
+            });
+            return;
+        }
+
         const stakeAmountNum = Number.parseFloat(stakeAmount)
         if (isNaN(stakeAmountNum) || stakeAmountNum <= 0) {
             toast({
@@ -592,11 +601,17 @@ export default function MarketPage() {
                 title: "Staking Successful",
                 description: `You have successfully staked ${stakeAmount} RIFF on "${selectedRiff.title}".`,
             })
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error staking on riff:", error)
+            let errorMessage = "Failed to stake on this riff. Please try again.";
+            if (error.message?.includes("Cannot stake on your own riff")) {
+                errorMessage = "You cannot stake on your own creations.";
+            } else if (error.message?.includes("User already has a stake")) {
+                errorMessage = "You already have a stake on this riff.";
+            }
             toast({
                 title: "Staking Failed",
-                description: "Failed to stake on this riff. Please try again.",
+                description: errorMessage,
                 variant: "destructive",
             })
         } finally {
@@ -748,7 +763,7 @@ export default function MarketPage() {
                                         >
                                             <div className="flex gap-4 px-2 pb-2 pt-1" style={{ width: "max-content" }}>
                                                 {category === "New Uploads This Week" ? (
-                                                    recentUploads.map((riff) => (
+                                                    (recentUploads || []).map((riff) => (
                                                         <motion.div
                                                             key={riff.id}
                                                             className="group relative w-[100px] cursor-pointer"
@@ -783,7 +798,7 @@ export default function MarketPage() {
                                                         </motion.div>
                                                     ))
                                                 ) : (
-                                                    artists.map((artist) => (
+                                                    (artists || []).map((artist) => (
                                                         <motion.div
                                                             key={artist.id}
                                                             className="group relative w-[100px] cursor-pointer"
@@ -1604,14 +1619,18 @@ export default function MarketPage() {
                                                             <motion.div className="flex-1" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                                                                 <Button
                                                                     variant="outline"
-                                                                    className="w-full border-orange-700/50 text-orange-200 hover:text-orange-100 hover:bg-orange-900/30"
+                                                                    className="w-full border-orange-700/50 text-orange-200 hover:text-orange-100 hover:bg-orange-900/30 disabled:bg-stone-700 disabled:text-stone-400 disabled:cursor-not-allowed"
                                                                     onClick={() => {
                                                                         setStakeAmount("500")
                                                                         setShowStakingModal(true)
                                                                     }}
+                                                                    disabled={walletAddress?.toLowerCase() === selectedRiff.creator.walletAddress.toLowerCase()}
                                                                 >
                                                                     <Sparkles size={16} className="mr-2" />
-                                                                    Stake
+                                                                    {walletAddress?.toLowerCase() === selectedRiff.creator.walletAddress.toLowerCase()
+                                                                        ? "Your Riff"
+                                                                        : "Stake"
+                                                                    }
                                                                 </Button>
                                                             </motion.div>
                                                         </DialogTrigger>
