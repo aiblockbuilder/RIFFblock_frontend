@@ -46,6 +46,9 @@ export interface Riff {
     royaltyPercentage: number
     isStakable: boolean
     stakingRoyaltyShare: number
+    minimumStakeAmount: number | null
+    lockPeriodDays: number | null
+    useProfileDefaults: boolean
     isNft: boolean
     tokenId: string
     contractAddress: string

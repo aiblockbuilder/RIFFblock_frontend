@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, use } from "react"
 import { useWallet } from "@/contexts/wallet-context"
 import { userApi } from "@/lib/api-client"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -18,12 +18,13 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 
 interface PageProps {
-    params: {
+    params: Promise<{
         walletAddress: string
-    }
+    }>
 }
 
 export default function ProfilePage({ params }: PageProps) {
+    const { walletAddress } = use(params)
     const { isConnected, walletAddress: currentUserWallet } = useWallet()
     const [activeTab, setActiveTab] = useState("music")
     const [profile, setProfile] = useState<UserProfile>()
@@ -34,7 +35,7 @@ export default function ProfilePage({ params }: PageProps) {
     useEffect(() => {
         async function fetchProfileData() {
             try {
-                const response = await userApi.getUserProfile(params.walletAddress)
+                const response = await userApi.getUserProfile(walletAddress)
                 setProfile(response)
             } catch (error) {
                 console.error("Error fetching profile:", error)
@@ -49,10 +50,10 @@ export default function ProfilePage({ params }: PageProps) {
         }
 
         fetchProfileData()
-    }, [params.walletAddress])
+    }, [walletAddress])
 
     // Check if the profile belongs to the connected wallet
-    const isOwner = isConnected && currentUserWallet?.toLowerCase() === params.walletAddress.toLowerCase()
+    const isOwner = isConnected && currentUserWallet?.toLowerCase() === walletAddress.toLowerCase()
 
     if (isLoading) {
         return (
@@ -130,18 +131,18 @@ export default function ProfilePage({ params }: PageProps) {
 
                                 <TabsContent value="music" className="space-y-8">
                                     {/* Riff Gallery */}
-                                    <RiffGallery isOwner={isOwner} isEditing={false} walletAddress={params.walletAddress} />
+                                    <RiffGallery isOwner={isOwner} isEditing={false} walletAddress={walletAddress} />
 
                                     {/* Favorites / Tips Given */}
-                                    <FavoriteRiffs isOwner={isOwner} walletAddress={params.walletAddress} />
+                                    <FavoriteRiffs isOwner={isOwner} walletAddress={walletAddress} />
                                 </TabsContent>
 
                                 <TabsContent value="community" className="space-y-8">
                                     {/* Activity Feed */}
-                                    <ActivityFeed walletAddress={params.walletAddress} />
+                                    <ActivityFeed walletAddress={walletAddress} />
 
                                     {/* Backstage Access (Tipping Tiers) */}
-                                    <TippingTiers isOwner={isOwner} isEditing={false} walletAddress={params.walletAddress} />
+                                    <TippingTiers isOwner={isOwner} isEditing={false} walletAddress={walletAddress} />
                                 </TabsContent>
                             </Tabs>
                         </div>

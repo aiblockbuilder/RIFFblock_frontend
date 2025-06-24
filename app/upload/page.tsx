@@ -36,7 +36,8 @@ import MainLayout from "@/components/layouts/main-layout"
 import WaveformVisualizer from "@/components/upload/waveform-visualizer"
 import WalletConnect from "@/components/wallet-connect"
 import CreativeGradientBackground from "@/components/creative-gradient-background"
-import { nftApi, collectionApi } from "@/lib/api-client"
+import { nftApi, collectionApi, userApi } from "@/lib/api-client"
+import { contractService } from "@/lib/contracts"
 import { GENRES, MOODS, INSTRUMENTS, KEY_SIGNATURES, TIME_SIGNATURES, type Genre, type Mood, type Instrument, type KeySignature, type TimeSignature } from "@/constants/riff-options"
 
 // Define the steps in the upload process
@@ -94,6 +95,10 @@ export default function UploadPage() {
     // Staking settings state
     const [customRoyaltyShare, setCustomRoyaltyShare] = useState(50)
     const [useProfileDefaults, setUseProfileDefaults] = useState(true)
+    const [minimumStakeAmount, setMinimumStakeAmount] = useState(100)
+    const [lockPeriodDays, setLockPeriodDays] = useState(30)
+    const [userStakingSettings, setUserStakingSettings] = useState<any>(null)
+    const [isLoadingStakingSettings, setIsLoadingStakingSettings] = useState(false)
 
     // Audio player refs
     const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -138,6 +143,33 @@ export default function UploadPage() {
 
         fetchCollections()
     }, [collection, walletAddress])
+
+    // Fetch user's staking settings
+    useEffect(() => {
+        const fetchStakingSettings = async () => {
+            if (walletAddress) {
+                setIsLoadingStakingSettings(true)
+                try {
+                    const settings = await userApi.getStakingSettings(walletAddress)
+                    setUserStakingSettings(settings)
+                    
+                    // Set default values from user settings
+                    if (settings) {
+                        setCustomRoyaltyShare(settings.defaultRoyaltyShare)
+                        setMinimumStakeAmount(settings.minimumStakeAmount)
+                        setLockPeriodDays(settings.lockPeriodDays)
+                    }
+                } catch (error) {
+                    console.error("Error fetching staking settings:", error)
+                    // Use default values if settings not found
+                } finally {
+                    setIsLoadingStakingSettings(false)
+                }
+            }
+        }
+
+        fetchStakingSettings()
+    }, [walletAddress])
 
     // Handle file upload
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -392,6 +424,38 @@ export default function UploadPage() {
 
         const uploadWithRetry = async () => {
             try {
+                // Step 1: Mint NFT on blockchain (if minting as NFT)
+                let tokenId: string | null = null
+                let contractAddress: string | null = null
+
+                if (uploadType === "mint-nft") {
+                    setIsMinting(true)
+                    try {
+                        // Mint NFT using smart contract
+                        const mintResult = await mintNFT()
+                        tokenId = mintResult.tokenId
+                        contractAddress = mintResult.contractAddress
+                        
+                        toast({
+                            title: "NFT Minted Successfully",
+                            description: `Token ID: ${tokenId}`,
+                        })
+                    } catch (mintError: any) {
+                        console.error("Minting error:", mintError)
+                        toast({
+                            title: "Minting Failed",
+                            description: mintError.message || "Failed to mint NFT. Please try again.",
+                            variant: "destructive",
+                        })
+                        setIsMinting(false)
+                        setIsUploading(false)
+                        return
+                    } finally {
+                        setIsMinting(false)
+                    }
+                }
+
+                // Step 2: Upload to backend
                 const formData = new FormData()
                 formData.append("audio", file)
                 if (coverImage) {
@@ -410,6 +474,9 @@ export default function UploadPage() {
                 formData.append("royaltyPercentage", String(royaltyPercentage))
                 formData.append("isStakable", String(enableStaking))
                 formData.append("stakingRoyaltyShare", String(customRoyaltyShare))
+                formData.append("minimumStakeAmount", String(minimumStakeAmount))
+                formData.append("lockPeriodDays", String(lockPeriodDays))
+                formData.append("useProfileDefaults", String(useProfileDefaults))
                 formData.append("unlockSourceFiles", String(unlockSourceFiles))
                 formData.append("unlockRemixRights", String(unlockRemixRights))
                 formData.append("unlockPrivateMessages", String(unlockPrivateMessages))
@@ -417,6 +484,13 @@ export default function UploadPage() {
                 formData.append("walletAddress", walletAddress)
                 if (fileDuration !== null) {
                     formData.append("duration", String(fileDuration))
+                }
+
+                // Add NFT data if minted
+                if (tokenId && contractAddress) {
+                    formData.append("isNft", "true")
+                    formData.append("tokenId", tokenId)
+                    formData.append("contractAddress", contractAddress)
                 }
 
                 if (collection === "new" && newCollectionName) {
@@ -430,7 +504,9 @@ export default function UploadPage() {
                 
                 toast({
                     title: "Success",
-                    description: "Your riff has been uploaded successfully!",
+                    description: uploadType === "mint-nft" 
+                        ? "Your NFT has been minted and uploaded successfully!" 
+                        : "Your riff has been uploaded successfully!",
                 })
                 
                 // Redirect to profile page instead of riff page
@@ -461,6 +537,51 @@ export default function UploadPage() {
         }
 
         await uploadWithRetry()
+    }
+
+    // Mint NFT using smart contract
+    const mintNFT = async (): Promise<{ tokenId: string; contractAddress: string }> => {
+        try {
+            // Create NFT metadata
+            const metadata = {
+                name: title,
+                description: description,
+                image: coverImagePreview || "/audio-waveform-visualization.png",
+                audio: filePreview,
+                attributes: [
+                    { trait_type: "Genre", value: genre },
+                    { trait_type: "Mood", value: mood },
+                    { trait_type: "Instrument", value: instrument },
+                    { trait_type: "Key Signature", value: keySignature },
+                    { trait_type: "Time Signature", value: timeSignature },
+                    { trait_type: "Duration", value: fileDuration ? formatTime(fileDuration) : "Unknown" },
+                    { trait_type: "Price", value: price || "0" },
+                    { trait_type: "Currency", value: currency },
+                    { trait_type: "Royalty Percentage", value: royaltyPercentage },
+                    { trait_type: "Staking Enabled", value: enableStaking },
+                    { trait_type: "Staking Royalty Share", value: customRoyaltyShare },
+                    { trait_type: "Minimum Stake Amount", value: minimumStakeAmount },
+                    { trait_type: "Lock Period Days", value: lockPeriodDays },
+                    { trait_type: "Use Profile Defaults", value: useProfileDefaults },
+                    { trait_type: "Unlock Source Files", value: unlockSourceFiles },
+                    { trait_type: "Unlock Remix Rights", value: unlockRemixRights },
+                    { trait_type: "Unlock Private Messages", value: unlockPrivateMessages },
+                    { trait_type: "Unlock Backstage Content", value: unlockBackstageContent }
+                ]
+            }
+
+            // For now, we'll use a mock tokenURI
+            // In production, you would upload this metadata to IPFS
+            const tokenURI = `ipfs://mock-cid-${Date.now()}`
+
+            // Mint the NFT using the contract service
+            const result = await contractService.mintRiffNFT(tokenURI)
+            
+            return result
+        } catch (error: any) {
+            console.error("Error in mintNFT:", error)
+            throw error
+        }
     }
 
     // Generate a random waveform if no cover image
@@ -1266,61 +1387,126 @@ export default function UploadPage() {
                         </div>
 
                         <div className="space-y-4">
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <Label htmlFor="royalty-share">Royalty Share for Stakers</Label>
-                                    <span className="text-sm text-zinc-400">{customRoyaltyShare}%</span>
-                                </div>
-                                <Slider
-                                    id="royalty-share"
-                                    min={10}
-                                    max={90}
-                                    step={5}
-                                    value={[customRoyaltyShare]}
-                                    onValueChange={(value) => setCustomRoyaltyShare(value[0])}
-                                    className="py-4"
+                            <div className="flex items-center justify-between">
+                                <Label htmlFor="profile-staking-defaults" className="cursor-pointer">
+                                    Use Profile Defaults
+                                </Label>
+                                <Switch
+                                    id="profile-staking-defaults"
+                                    checked={useProfileDefaults}
+                                    onCheckedChange={setUseProfileDefaults}
                                 />
-                                <p className="text-xs text-zinc-500">
-                                    This percentage of your royalties will be shared among stakers based on their stake amount. You'll
-                                    keep {100 - customRoyaltyShare}% of royalties.
-                                </p>
                             </div>
+                            <p className="text-xs text-zinc-500">
+                                Use your profile's default staking settings instead of custom settings for this riff.
+                            </p>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
+                            {useProfileDefaults ? (
                                 <div className="bg-zinc-900/80 border border-zinc-800 rounded-lg p-4">
                                     <div className="flex items-center gap-3 mb-3">
-                                        <Percent className="h-5 w-5 text-violet-400" />
-                                        <h4 className="font-medium">Your Share</h4>
+                                        <Info className="h-5 w-5 text-blue-400" />
+                                        <h4 className="font-medium">Using Profile Defaults</h4>
                                     </div>
-                                    <div className="text-3xl font-bold text-center py-4">{100 - customRoyaltyShare}%</div>
-                                    <p className="text-xs text-zinc-500 text-center">Percentage of royalties you'll keep</p>
+                                    {isLoadingStakingSettings ? (
+                                        <div className="flex items-center justify-center py-4">
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                            <span className="ml-2 text-sm text-zinc-400">Loading settings...</span>
+                                        </div>
+                                    ) : userStakingSettings ? (
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <div className="text-center">
+                                                <div className="text-2xl font-bold text-violet-400">{userStakingSettings.defaultRoyaltyShare}%</div>
+                                                <div className="text-xs text-zinc-500">Royalty Share</div>
+                                            </div>
+                                            <div className="text-center">
+                                                <div className="text-2xl font-bold text-violet-400">{userStakingSettings.minimumStakeAmount} RIFF</div>
+                                                <div className="text-xs text-zinc-500">Min Stake</div>
+                                            </div>
+                                            <div className="text-center">
+                                                <div className="text-2xl font-bold text-violet-400">{userStakingSettings.lockPeriodDays} days</div>
+                                                <div className="text-xs text-zinc-500">Lock Period</div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm text-zinc-400">No profile settings found. Using default values.</p>
+                                    )}
                                 </div>
-
-                                <div className="bg-zinc-900/80 border border-zinc-800 rounded-lg p-4">
-                                    <div className="flex items-center gap-3 mb-3">
-                                        <Coins className="h-5 w-5 text-violet-400" />
-                                        <h4 className="font-medium">Stakers Share</h4>
+                            ) : (
+                                <div className="space-y-6">
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <Label htmlFor="royalty-share">Royalty Share for Stakers</Label>
+                                            <span className="text-sm text-zinc-400">{customRoyaltyShare}%</span>
+                                        </div>
+                                        <Slider
+                                            id="royalty-share"
+                                            min={10}
+                                            max={90}
+                                            step={5}
+                                            value={[customRoyaltyShare]}
+                                            onValueChange={(value) => setCustomRoyaltyShare(value[0])}
+                                            className="py-4"
+                                        />
+                                        <p className="text-xs text-zinc-500">
+                                            This percentage of your royalties will be shared among stakers based on their stake amount. You'll
+                                            keep {100 - customRoyaltyShare}% of royalties.
+                                        </p>
                                     </div>
-                                    <div className="text-3xl font-bold text-center py-4">{customRoyaltyShare}%</div>
-                                    <p className="text-xs text-zinc-500 text-center">Percentage shared among all stakers</p>
-                                </div>
-                            </div>
 
-                            <div className="pt-4">
-                                <div className="flex items-center justify-between">
-                                    <Label htmlFor="profile-staking-defaults" className="cursor-pointer">
-                                        Use Profile Defaults
-                                    </Label>
-                                    <Switch
-                                        id="profile-staking-defaults"
-                                        checked={useProfileDefaults}
-                                        onCheckedChange={setUseProfileDefaults}
-                                    />
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="minimum-stake">Minimum Stake Amount (RIFF)</Label>
+                                            <Input
+                                                id="minimum-stake"
+                                                type="number"
+                                                min="1"
+                                                value={minimumStakeAmount}
+                                                onChange={(e) => setMinimumStakeAmount(parseInt(e.target.value) || 100)}
+                                                className="bg-zinc-900/50 border-zinc-800"
+                                            />
+                                            <p className="text-xs text-zinc-500">
+                                                Minimum amount of RIFF tokens required to stake on this riff.
+                                            </p>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label htmlFor="lock-period">Lock Period (Days)</Label>
+                                            <Input
+                                                id="lock-period"
+                                                type="number"
+                                                min="1"
+                                                max="365"
+                                                value={lockPeriodDays}
+                                                onChange={(e) => setLockPeriodDays(parseInt(e.target.value) || 30)}
+                                                className="bg-zinc-900/50 border-zinc-800"
+                                            />
+                                            <p className="text-xs text-zinc-500">
+                                                Number of days stakers must wait before they can unstake their tokens.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
+                                        <div className="bg-zinc-900/80 border border-zinc-800 rounded-lg p-4">
+                                            <div className="flex items-center gap-3 mb-3">
+                                                <Percent className="h-5 w-5 text-violet-400" />
+                                                <h4 className="font-medium">Your Share</h4>
+                                            </div>
+                                            <div className="text-3xl font-bold text-center py-4">{100 - customRoyaltyShare}%</div>
+                                            <p className="text-xs text-zinc-500 text-center">Percentage of royalties you'll keep</p>
+                                        </div>
+
+                                        <div className="bg-zinc-900/80 border border-zinc-800 rounded-lg p-4">
+                                            <div className="flex items-center gap-3 mb-3">
+                                                <Coins className="h-5 w-5 text-violet-400" />
+                                                <h4 className="font-medium">Stakers Share</h4>
+                                            </div>
+                                            <div className="text-3xl font-bold text-center py-4">{customRoyaltyShare}%</div>
+                                            <p className="text-xs text-zinc-500 text-center">Percentage shared among all stakers</p>
+                                        </div>
+                                    </div>
                                 </div>
-                                <p className="text-xs text-zinc-500">
-                                    Use your profile's default staking settings instead of custom settings for this riff.
-                                </p>
-                            </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -1449,6 +1635,32 @@ export default function UploadPage() {
                                         </div>
                                     </div>
                                 </div>
+
+                                {enableStaking && (
+                                    <div className="mt-4 pt-4 border-t border-zinc-800">
+                                        <h4 className="text-sm text-zinc-500 mb-2">Staking Configuration</h4>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                            <div>
+                                                <h5 className="text-xs text-zinc-500 mb-1">Royalty Share</h5>
+                                                <p className="font-medium">{customRoyaltyShare}% to stakers</p>
+                                            </div>
+                                            <div>
+                                                <h5 className="text-xs text-zinc-500 mb-1">Min Stake</h5>
+                                                <p className="font-medium">{minimumStakeAmount} RIFF</p>
+                                            </div>
+                                            <div>
+                                                <h5 className="text-xs text-zinc-500 mb-1">Lock Period</h5>
+                                                <p className="font-medium">{lockPeriodDays} days</p>
+                                            </div>
+                                        </div>
+                                        <div className="mt-2">
+                                            <h5 className="text-xs text-zinc-500 mb-1">Settings Source</h5>
+                                            <p className="font-medium text-sm">
+                                                {useProfileDefaults ? "Using Profile Defaults" : "Custom Settings"}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
 
