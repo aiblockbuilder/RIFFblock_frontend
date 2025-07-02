@@ -36,8 +36,10 @@ import MainLayout from "@/components/layouts/main-layout"
 import WaveformVisualizer from "@/components/upload/waveform-visualizer"
 import WalletConnect from "@/components/wallet-connect"
 import CreativeGradientBackground from "@/components/creative-gradient-background"
+import NetworkStatus from "@/components/network-status"
 import { nftApi, collectionApi, userApi } from "@/lib/api-client"
 import { contractService } from "@/lib/contracts"
+import { pinataService } from "@/lib/pinata-service"
 import { GENRES, MOODS, INSTRUMENTS, KEY_SIGNATURES, TIME_SIGNATURES, type Genre, type Mood, type Instrument, type KeySignature, type TimeSignature } from "@/constants/riff-options"
 
 // Define the steps in the upload process
@@ -424,17 +426,123 @@ export default function UploadPage() {
 
         const uploadWithRetry = async () => {
             try {
-                // Step 1: Mint NFT on blockchain (if minting as NFT)
+                // Step 1: Upload files to IPFS via Pinata
+                let audioCid: string
+                let coverCid: string | null = null
+                let metadataUrl: string | null = null
+
+                try {
+                    // Show IPFS upload progress
+                    toast({
+                        title: "Uploading to IPFS",
+                        description: "Uploading your audio and metadata to IPFS...",
+                    })
+
+                    // Test Pinata credentials first
+                    const credentialTest = await pinataService.testCredentials()
+                    if (!credentialTest.valid) {
+                        throw new Error(`Pinata credentials are invalid: ${credentialTest.message}`)
+                    }
+
+                    // Upload audio file to IPFS
+                    audioCid = await pinataService.uploadFileToIPFS(file)
+                    console.log("Audio uploaded to IPFS:", audioCid)
+
+                    // Upload cover image to IPFS if provided
+                    if (coverImage) {
+                        coverCid = await pinataService.uploadFileToIPFS(coverImage, `cover-${Date.now()}.${coverImage.name.split('.').pop()}`)
+                        console.log("Cover image uploaded to IPFS:", coverCid)
+                    }
+
+                    // Create and upload metadata if minting as NFT
+                    if (uploadType === "mint-nft") {
+                        const metadata = {
+                            name: title,
+                            description: description,
+                            attributes: [
+                                { trait_type: "Genre", value: genre },
+                                { trait_type: "Mood", value: mood },
+                                { trait_type: "Instrument", value: instrument },
+                                { trait_type: "Key Signature", value: keySignature },
+                                { trait_type: "Time Signature", value: timeSignature },
+                                { trait_type: "Duration", value: fileDuration ? formatTime(fileDuration) : "Unknown" },
+                                { trait_type: "Price", value: price || "0" },
+                                { trait_type: "Currency", value: currency },
+                                { trait_type: "Royalty Percentage", value: royaltyPercentage },
+                                { trait_type: "Staking Enabled", value: enableStaking },
+                                { trait_type: "Staking Royalty Share", value: customRoyaltyShare },
+                                { trait_type: "Minimum Stake Amount", value: minimumStakeAmount },
+                                { trait_type: "Lock Period Days", value: lockPeriodDays },
+                                { trait_type: "Use Profile Defaults", value: useProfileDefaults },
+                                { trait_type: "Unlock Source Files", value: unlockSourceFiles },
+                                { trait_type: "Unlock Remix Rights", value: unlockRemixRights },
+                                { trait_type: "Unlock Private Messages", value: unlockPrivateMessages },
+                                { trait_type: "Unlock Backstage Content", value: unlockBackstageContent }
+                            ]
+                        }
+
+                        // Create complete metadata with IPFS URLs
+                        const completeMetadata = {
+                            ...metadata,
+                            audio: pinataService.getIPFSGatewayUrl(audioCid),
+                            image: coverCid ? pinataService.getIPFSGatewayUrl(coverCid) : (coverImagePreview || "/audio-waveform-visualization.png")
+                        }
+
+                        // Upload metadata to IPFS
+                        const metadataCid = await pinataService.uploadMetadataToIPFS(completeMetadata)
+                        metadataUrl = pinataService.getIPFSUri(metadataCid)
+                        
+                        console.log("Metadata uploaded to IPFS:", metadataUrl)
+
+                        // Validate the uploaded metadata
+                        await pinataService.validateMetadata(metadataCid)
+                        console.log("Metadata validation successful")
+                    }
+
+                    toast({
+                        title: "IPFS Upload Complete",
+                        description: "Files uploaded to IPFS successfully!",
+                    })
+
+                } catch (ipfsError: any) {
+                    console.error("IPFS upload error:", ipfsError)
+                    toast({
+                        title: "IPFS Upload Failed",
+                        description: "Failed to upload to IPFS. Please check your internet connection and try again.",
+                        variant: "destructive",
+                    })
+                    setIsUploading(false)
+                    return
+                }
+
+                // Step 2: Mint NFT on blockchain (if minting as NFT)
                 let tokenId: string | null = null
                 let contractAddress: string | null = null
 
-                if (uploadType === "mint-nft") {
+                if (uploadType === "mint-nft" && metadataUrl) {
                     setIsMinting(true)
                     try {
+                        // Validate contract before minting
+                        toast({
+                            title: "Validating Contract",
+                            description: "Checking smart contract configuration...",
+                        })
+
+                        const contractValidation = await contractService.validateContract()
+                        if (!contractValidation.valid) {
+                            throw new Error(`Contract validation failed: ${contractValidation.message}`)
+                        }
+
+                        toast({
+                            title: "Contract Valid",
+                            description: "Smart contract is ready for minting.",
+                        })
+
                         // Mint NFT using smart contract
-                        const mintResult = await mintNFT()
-                        tokenId = mintResult.tokenId
+                        const mintResult = await contractService.mintRiffNFT()
+                        tokenId = mintResult.tokenId // tokenId is already a string from contract service
                         contractAddress = mintResult.contractAddress
+                        console.log("NFT minted successfully:", tokenId, contractAddress)
                         
                         toast({
                             title: "NFT Minted Successfully",
@@ -442,9 +550,24 @@ export default function UploadPage() {
                         })
                     } catch (mintError: any) {
                         console.error("Minting error:", mintError)
+                        
+                        // Provide specific error messages based on the error type
+                        let errorMessage = "Failed to mint NFT. Please try again."
+                        if (mintError.message.includes("Contract ABI mismatch")) {
+                            errorMessage = "Smart contract configuration error. Please contact support."
+                        } else if (mintError.message.includes("No contract found")) {
+                            errorMessage = "Smart contract not deployed. Please check network configuration."
+                        } else if (mintError.message.includes("insufficient funds")) {
+                            errorMessage = "Insufficient funds for gas fees. Please add more tokens to your wallet."
+                        } else if (mintError.message.includes("user rejected")) {
+                            errorMessage = "Transaction was rejected by user. Please try again."
+                        } else if (mintError.message.includes("gas")) {
+                            errorMessage = "Transaction failed due to insufficient gas. Please try again with higher gas limit."
+                        }
+                        
                         toast({
                             title: "Minting Failed",
-                            description: mintError.message || "Failed to mint NFT. Please try again.",
+                            description: errorMessage,
                             variant: "destructive",
                         })
                         setIsMinting(false)
@@ -455,52 +578,49 @@ export default function UploadPage() {
                     }
                 }
 
-                // Step 2: Upload to backend
-                const formData = new FormData()
-                formData.append("audio", file)
-                if (coverImage) {
-                    formData.append("cover", coverImage)
-                }
-                formData.append("title", title)
-                formData.append("description", description)
-                formData.append("genre", genre)
-                formData.append("mood", mood)
-                formData.append("instrument", instrument)
-                formData.append("keySignature", keySignature)
-                formData.append("timeSignature", timeSignature)
-                formData.append("isBargainBin", String(isBargainBin))
-                formData.append("price", price || "0")
-                formData.append("currency", currency)
-                formData.append("royaltyPercentage", String(royaltyPercentage))
-                formData.append("isStakable", String(enableStaking))
-                formData.append("stakingRoyaltyShare", String(customRoyaltyShare))
-                formData.append("minimumStakeAmount", String(minimumStakeAmount))
-                formData.append("lockPeriodDays", String(lockPeriodDays))
-                formData.append("useProfileDefaults", String(useProfileDefaults))
-                formData.append("unlockSourceFiles", String(unlockSourceFiles))
-                formData.append("unlockRemixRights", String(unlockRemixRights))
-                formData.append("unlockPrivateMessages", String(unlockPrivateMessages))
-                formData.append("unlockBackstageContent", String(unlockBackstageContent))
-                formData.append("walletAddress", walletAddress)
-                if (fileDuration !== null) {
-                    formData.append("duration", String(fileDuration))
-                }
-
-                // Add NFT data if minted
-                if (tokenId && contractAddress) {
-                    formData.append("isNft", "true")
-                    formData.append("tokenId", tokenId)
-                    formData.append("contractAddress", contractAddress)
+                // Step 3: Upload riff data to backend with IPFS CIDs
+                const riffData: any = {
+                    title,
+                    description,
+                    genre,
+                    mood,
+                    instrument,
+                    keySignature,
+                    timeSignature,
+                    isBargainBin: String(isBargainBin),
+                    price: price || "0",
+                    currency,
+                    royaltyPercentage: String(royaltyPercentage),
+                    isStakable: String(enableStaking),
+                    stakingRoyaltyShare: String(customRoyaltyShare),
+                    minimumStakeAmount: String(minimumStakeAmount),
+                    lockPeriodDays: String(lockPeriodDays),
+                    useProfileDefaults: String(useProfileDefaults),
+                    unlockSourceFiles: String(unlockSourceFiles),
+                    unlockRemixRights: String(unlockRemixRights),
+                    unlockPrivateMessages: String(unlockPrivateMessages),
+                    unlockBackstageContent: String(unlockBackstageContent),
+                    walletAddress,
+                    duration: fileDuration ? String(fileDuration) : undefined,
+                    // IPFS data
+                    audioCid,
+                    coverCid,
+                    metadataUrl,
+                    // NFT data if minted
+                    isNft: tokenId ? "true" : "false",
+                    tokenId: tokenId || undefined,
+                    contractAddress: contractAddress || undefined,
                 }
 
+                // Add collection data
                 if (collection === "new" && newCollectionName) {
-                    formData.append("newCollectionName", newCollectionName)
-                    formData.append("newCollectionDescription", newCollectionDescription)
+                    riffData.newCollectionName = newCollectionName
+                    riffData.newCollectionDescription = newCollectionDescription
                 } else if (collection === "existing" && selectedCollectionId) {
-                    formData.append("collectionId", selectedCollectionId)
+                    riffData.collectionId = selectedCollectionId
                 }
 
-                const response = await nftApi.createRiff(walletAddress, formData)
+                const response = await nftApi.createRiff(walletAddress, riffData)
                 
                 toast({
                     title: "Success",
@@ -1843,6 +1963,11 @@ export default function UploadPage() {
                 <div className="min-h-screen pb-16 mt-16">
                     <div className="container px-4 md:px-6 max-w-6xl mx-auto">
                         {renderStepIndicator()}
+
+                        {/* Network Status Component */}
+                        <div className="mb-6">
+                            <NetworkStatus />
+                        </div>
 
                         <AnimatePresence mode="wait">
                             <motion.div

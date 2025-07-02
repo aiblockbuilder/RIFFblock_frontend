@@ -152,13 +152,11 @@ export const tipApi = {
 
 // NFT API
 export const nftApi = {
-    createRiff: (walletAddress: string, formData: FormData) =>
+    createRiff: (walletAddress: string, riffData: any) =>
         apiClient("/riffs/upload", { 
             method: "POST", 
-            body: formData, 
-            walletAddress,
-            // Don't set Content-Type header - browser will set it automatically with boundary
-            headers: {}
+            body: riffData, 
+            walletAddress
         }),
 
     getRiff: (id: string, walletAddress: string) => apiClient(`/riffs/riff/${id}`, { walletAddress }),
