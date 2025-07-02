@@ -7,6 +7,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
+import { ethers } from "ethers"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
@@ -594,21 +595,56 @@ export default function MarketPage() {
         setIsProcessing(true)
 
         try {
+            // Step 1: Interact with smart contract first
+            console.log("Step 1: Calling smart contract stakeOnRiff function...")
+            
+            // Import contract service
+            const { contractService } = await import('@/lib/contracts')
+            
+            // Convert amount to wei (assuming RIFF has 18 decimals like most ERC20 tokens)
+            const amountInWei = ethers.parseUnits(stakeAmountNum.toString(), 18)
+            
+            // Call the smart contract stakeOnRiff function
+            const contractResult = await contractService.stakeOnRiff(selectedRiff.id.toString(), amountInWei.toString())
+            
+            console.log("Smart contract transaction successful:", contractResult)
+            
+            // Step 2: If contract interaction succeeds, call backend API
+            console.log("Step 2: Calling backend API to update database...")
             await stakeApi.stakeOnNft(selectedRiff.id, walletAddress, stakeAmountNum)
             
             setShowStakingModal(false)
             toast({
                 title: "Staking Successful",
-                description: `You have successfully staked ${stakeAmount} RIFF on "${selectedRiff.title}".`,
+                description: `You have successfully staked ${stakeAmount} RIFF on "${selectedRiff.title}". Transaction hash: ${contractResult.hash}`,
             })
         } catch (error: any) {
             console.error("Error staking on riff:", error)
-            let errorMessage = "Failed to stake on this riff. Please try again.";
-            if (error.message?.includes("Cannot stake on your own riff")) {
-                errorMessage = "You cannot stake on your own creations.";
-            } else if (error.message?.includes("User already has a stake")) {
-                errorMessage = "You already have a stake on this riff.";
+            
+            // Handle specific error cases
+            let errorMessage = "Failed to stake on this riff. Please try again."
+            
+            // Check if it's a contract error
+            if (error.message.includes("contract") || error.message.includes("transaction") || error.message.includes("gas")) {
+                errorMessage = `Smart contract error: ${error.message}`
+            } else if (error.message.includes("Cannot stake on your own riff")) {
+                errorMessage = "You cannot stake on your own creations."
+            } else if (error.message.includes("User already has a stake")) {
+                errorMessage = "You already have a stake on this riff."
+            } else if (error.message.includes("Riff is not stakable")) {
+                errorMessage = "This riff is not available for staking."
+            } else if (error.message.includes("User not found")) {
+                errorMessage = "User profile not found. Please create a profile first."
+            } else if (error.message.includes("Riff not found")) {
+                errorMessage = "Riff not found. Please try again."
+            } else if (error.message.includes("amount")) {
+                errorMessage = "Invalid stake amount. Please enter a valid number."
+            } else if (error.message.includes("insufficient funds")) {
+                errorMessage = "Insufficient RIFF tokens in your wallet for staking."
+            } else if (error.message.includes("user rejected")) {
+                errorMessage = "Transaction was rejected by user."
             }
+            
             toast({
                 title: "Staking Failed",
                 description: errorMessage,
