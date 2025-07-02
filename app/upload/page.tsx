@@ -659,6 +659,51 @@ export default function UploadPage() {
         await uploadWithRetry()
     }
 
+    // Mint NFT using smart contract
+    const mintNFT = async (): Promise<{ tokenId: string; contractAddress: string }> => {
+        try {
+            // Create NFT metadata
+            const metadata = {
+                name: title,
+                description: description,
+                image: coverImagePreview || "/audio-waveform-visualization.png",
+                audio: filePreview,
+                attributes: [
+                    { trait_type: "Genre", value: genre },
+                    { trait_type: "Mood", value: mood },
+                    { trait_type: "Instrument", value: instrument },
+                    { trait_type: "Key Signature", value: keySignature },
+                    { trait_type: "Time Signature", value: timeSignature },
+                    { trait_type: "Duration", value: fileDuration ? formatTime(fileDuration) : "Unknown" },
+                    { trait_type: "Price", value: price || "0" },
+                    { trait_type: "Currency", value: currency },
+                    { trait_type: "Royalty Percentage", value: royaltyPercentage },
+                    { trait_type: "Staking Enabled", value: enableStaking },
+                    { trait_type: "Staking Royalty Share", value: customRoyaltyShare },
+                    { trait_type: "Minimum Stake Amount", value: minimumStakeAmount },
+                    { trait_type: "Lock Period Days", value: lockPeriodDays },
+                    { trait_type: "Use Profile Defaults", value: useProfileDefaults },
+                    { trait_type: "Unlock Source Files", value: unlockSourceFiles },
+                    { trait_type: "Unlock Remix Rights", value: unlockRemixRights },
+                    { trait_type: "Unlock Private Messages", value: unlockPrivateMessages },
+                    { trait_type: "Unlock Backstage Content", value: unlockBackstageContent }
+                ]
+            }
+
+            // For now, we'll use a mock tokenURI
+            // In production, you would upload this metadata to IPFS
+            const tokenURI = `ipfs://mock-cid-${Date.now()}`
+
+            // Mint the NFT using the contract service
+            const result = await contractService.mintRiffNFT(tokenURI)
+            
+            return result
+        } catch (error: any) {
+            console.error("Error in mintNFT:", error)
+            throw error
+        }
+    }
+
     // Generate a random waveform if no cover image
     const generateWaveform = () => {
         setCoverImagePreview("/audio-waveform-visualization.png")
