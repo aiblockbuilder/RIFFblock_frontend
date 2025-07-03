@@ -129,6 +129,8 @@ export const userApi = {
     }),
 
     getMostTippedProfile: () => apiClient(`/users/most-tipped`),
+
+    getTrendingCreators: (limit = 10) => apiClient(`/users/trending-creators?limit=${limit}`),
 }
 
 // Tip API

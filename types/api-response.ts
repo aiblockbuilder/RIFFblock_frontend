@@ -206,3 +206,12 @@ export interface StakableRiff {
     duration: string;
 }
 
+export interface TrendingCreator {
+    id: number;
+    name: string;
+    image: string;
+    walletAddress: string;
+    riffCount: number;
+    bio: string;
+}
+
