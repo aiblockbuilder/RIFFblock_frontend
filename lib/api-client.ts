@@ -129,6 +129,8 @@ export const userApi = {
     }),
 
     getMostTippedProfile: () => apiClient(`/users/most-tipped`),
+
+    getTrendingCreators: (limit = 10) => apiClient(`/users/trending-creators?limit=${limit}`),
 }
 
 // Tip API
@@ -247,4 +249,20 @@ export const stakeApi = {
 
   getUserStakedRiffs: (walletAddress: string) =>
     apiClient(`/stakes/user/${walletAddress}`),
+
+  claimRoyalties: (walletAddress: string, claimedAmounts: Array<{ stakeId: number; amount: number }>) =>
+    apiClient(`/stakes/claim-royalties/${walletAddress}`, {
+      method: "POST",
+      body: { claimedAmounts },
+      walletAddress
+    }),
+
+  unstakeFromStake: (stakeId: number, walletAddress: string) =>
+    apiClient(`/stakes/unstake-stake/${stakeId}/${walletAddress}`, {
+      method: "POST",
+      walletAddress
+    }),
+
+  getTotalRoyaltiesEarned: (walletAddress: string) =>
+    apiClient(`/stakes/total-royalties/${walletAddress}`),
 };

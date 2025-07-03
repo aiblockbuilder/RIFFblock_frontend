@@ -180,7 +180,9 @@ export interface StakingSettings {
 }
 
 export interface StakedRiff {
-    id: string;
+    id: number;
+    riffId: number;
+    tokenId: number;
     title: string;
     artist: string;
     image: string;
@@ -202,5 +204,14 @@ export interface StakableRiff {
     maxPool: number;
     royaltyShare: number;
     duration: string;
+}
+
+export interface TrendingCreator {
+    id: number;
+    name: string;
+    image: string;
+    walletAddress: string;
+    riffCount: number;
+    bio: string;
 }
 

@@ -5,8 +5,9 @@ import type React from "react"
 import { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
+import { ethers } from "ethers"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
@@ -40,6 +41,8 @@ import { nftApi } from "@/lib/api-client"
 import { toast } from "@/components/ui/use-toast"
 import { useWallet } from "@/contexts/wallet-context";
 import { favoriteApi, stakeApi } from "@/lib/api-client";
+import { userApi } from "@/lib/api-client";
+import { TrendingCreator } from "@/types/api-response";
 import {
     Dialog,
     DialogContent,
@@ -102,6 +105,8 @@ interface Artist {
     name: string
     image: string
     category: string
+    walletAddress?: string
+    riffCount?: number
 }
 
 export default function MarketPage() {
@@ -129,6 +134,7 @@ export default function MarketPage() {
     const riffsPerPage = 20
     const [recentUploads, setRecentUploads] = useState<Riff[]>([])
     const [isCurrentRiffFavorite, setIsCurrentRiffFavorite] = useState(false);
+    const [trendingCreators, setTrendingCreators] = useState<TrendingCreator[]>([])
     
     // Stake modal state
     const [showStakingModal, setShowStakingModal] = useState(false)
@@ -139,6 +145,7 @@ export default function MarketPage() {
     const ambienceRef = useRef<HTMLAudioElement>(null)
     const vinylFlipRef = useRef<HTMLAudioElement>(null)
     const pathname = usePathname()
+    const router = useRouter()
     const shelfRefs = useRef<Record<string, HTMLDivElement | null>>({})
     const filterSidebarRef = useRef<HTMLDivElement>(null)
     const { walletAddress, isConnected } = useWallet();
@@ -151,6 +158,19 @@ export default function MarketPage() {
         acc[artist.category].push(artist)
         return acc
     }, {})
+
+    // Add trending creators to the artistsByCategory
+    const updatedArtistsByCategory = {
+        ...artistsByCategory,
+        "Trending Creators": trendingCreators.map(creator => ({
+            id: creator.id,
+            name: creator.name,
+            image: creator.image,
+            category: "Trending Creators",
+            walletAddress: creator.walletAddress,
+            riffCount: creator.riffCount
+        }))
+    }
 
     // Fetch riffs from API
     const fetchRiffs = async () => {
@@ -243,10 +263,26 @@ export default function MarketPage() {
         }
     };
 
+    // Fetch trending creators
+    const fetchTrendingCreators = async () => {
+        try {
+            const response = await userApi.getTrendingCreators(8); // Get top 8 trending creators
+            setTrendingCreators(response);
+        } catch (error) {
+            console.error("Error fetching trending creators:", error);
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Failed to load trending creators.",
+            });
+        }
+    };
+
     // Fetch initial data on mount
     useEffect(() => {
         fetchRiffs();
         fetchRecentUploads();
+        fetchTrendingCreators();
     }, []); // Empty dependency array to run only once on mount
 
     // Group riffs by genre for bins
@@ -594,21 +630,56 @@ export default function MarketPage() {
         setIsProcessing(true)
 
         try {
+            // Step 1: Interact with smart contract first
+            console.log("Step 1: Calling smart contract stakeOnRiff function...")
+            
+            // Import contract service
+            const { contractService } = await import('@/lib/contracts')
+            
+            // Convert amount to wei (assuming RIFF has 18 decimals like most ERC20 tokens)
+            const amountInWei = ethers.parseUnits(stakeAmountNum.toString(), 18)
+            
+            // Call the smart contract stakeOnRiff function
+            const contractResult = await contractService.stakeOnRiff(selectedRiff.id.toString(), amountInWei.toString())
+            
+            console.log("Smart contract transaction successful:", contractResult)
+            
+            // Step 2: If contract interaction succeeds, call backend API
+            console.log("Step 2: Calling backend API to update database...")
             await stakeApi.stakeOnNft(selectedRiff.id, walletAddress, stakeAmountNum)
             
             setShowStakingModal(false)
             toast({
                 title: "Staking Successful",
-                description: `You have successfully staked ${stakeAmount} RIFF on "${selectedRiff.title}".`,
+                description: `You have successfully staked ${stakeAmount} RIFF on "${selectedRiff.title}". Transaction hash: ${contractResult.hash}`,
             })
         } catch (error: any) {
             console.error("Error staking on riff:", error)
-            let errorMessage = "Failed to stake on this riff. Please try again.";
-            if (error.message?.includes("Cannot stake on your own riff")) {
-                errorMessage = "You cannot stake on your own creations.";
-            } else if (error.message?.includes("User already has a stake")) {
-                errorMessage = "You already have a stake on this riff.";
+            
+            // Handle specific error cases
+            let errorMessage = "Failed to stake on this riff. Please try again."
+            
+            // Check if it's a contract error
+            if (error.message.includes("contract") || error.message.includes("transaction") || error.message.includes("gas")) {
+                errorMessage = `Smart contract error: ${error.message}`
+            } else if (error.message.includes("Cannot stake on your own riff")) {
+                errorMessage = "You cannot stake on your own creations."
+            } else if (error.message.includes("User already has a stake")) {
+                errorMessage = "You already have a stake on this riff."
+            } else if (error.message.includes("Riff is not stakable")) {
+                errorMessage = "This riff is not available for staking."
+            } else if (error.message.includes("User not found")) {
+                errorMessage = "User profile not found. Please create a profile first."
+            } else if (error.message.includes("Riff not found")) {
+                errorMessage = "Riff not found. Please try again."
+            } else if (error.message.includes("amount")) {
+                errorMessage = "Invalid stake amount. Please enter a valid number."
+            } else if (error.message.includes("insufficient funds")) {
+                errorMessage = "Insufficient RIFF tokens in your wallet for staking."
+            } else if (error.message.includes("user rejected")) {
+                errorMessage = "Transaction was rejected by user."
             }
+            
             toast({
                 title: "Staking Failed",
                 description: errorMessage,
@@ -643,10 +714,10 @@ export default function MarketPage() {
                 {/* Audio elements */}
                 <audio
                     ref={audioRef}
-                    src={currentAudio?.audioFile || "/placeholder-audio.mp3"}
+                    src={currentAudio?.audioFile || "/audio/placeholder-audio.mp3"}
                 />
-                <audio ref={ambienceRef} src="/vinyl-crackle.mp3" loop />
-                <audio ref={vinylFlipRef} src="/vinyl-flip.mp3" />
+                <audio ref={ambienceRef} src="/audio/vinyl-crackle.mp3" loop />
+                <audio ref={vinylFlipRef} src="/audio/vinyl-flip.mp3" />
 
                 {/* Page header with sound toggle */}
                 <div className="container px-4 md:px-6 mb-8 pt-4 mt-6 relative z-10">
@@ -708,7 +779,7 @@ export default function MarketPage() {
 
                         {/* Shelves */}
                         <div className="space-y-8">
-                            {Object.entries(artistsByCategory).map(([category, artists], index) => (
+                            {Object.entries(updatedArtistsByCategory).map(([category, artists], index) => (
                                 <div
                                     key={category}
                                     className="space-y-3"
@@ -802,7 +873,14 @@ export default function MarketPage() {
                                                         <motion.div
                                                             key={artist.id}
                                                             className="group relative w-[100px] cursor-pointer"
-                                                            onClick={() => openRiffDetail(artist as unknown as Riff)}
+                                                            onClick={() => {
+                                                                // If it's a trending creator, navigate to their profile
+                                                                if (artist.category === "Trending Creators" && artist.walletAddress) {
+                                                                    router.push(`/profile/${artist.walletAddress}`);
+                                                                } else {
+                                                                    openRiffDetail(artist as unknown as Riff);
+                                                                }
+                                                            }}
                                                             whileHover={{
                                                                 y: -5,
                                                                 scale: 1.05,
@@ -828,6 +906,11 @@ export default function MarketPage() {
                                                                 {/* Title */}
                                                                 <div className="absolute bottom-2 left-2 right-2 text-xs font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity">
                                                                     {artist.name}
+                                                                    {artist.riffCount && (
+                                                                        <div className="text-xs text-orange-300 mt-1">
+                                                                            {artist.riffCount} riffs
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         </motion.div>
