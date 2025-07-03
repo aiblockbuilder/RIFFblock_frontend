@@ -21,6 +21,7 @@ import WalletConnect from "@/components/wallet-connect"
 import { UpdateProfileData, UserProfile, StakedRiff } from "@/types/api-response"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import Image from "next/image"
+import { ethers } from "ethers"
 
 export default function ProfilePage() {
     const router = useRouter()
@@ -32,6 +33,9 @@ export default function ProfilePage() {
     const [isLoading, setIsLoading] = useState(true)
     const [stakedRiffs, setStakedRiffs] = useState<StakedRiff[]>([])
     const [isLoadingStakes, setIsLoadingStakes] = useState(false)
+    const [isClaimingRoyalties, setIsClaimingRoyalties] = useState(false)
+    const [unstakingStakeId, setUnstakingStakeId] = useState<number | null>(null)
+    const [totalRoyaltiesEarned, setTotalRoyaltiesEarned] = useState(0)
 
     // Fetch user profile data
     useEffect(() => {
@@ -97,12 +101,155 @@ export default function ProfilePage() {
         }
     }
 
+    // Fetch total royalties earned from all stakes
+    const fetchTotalRoyalties = async () => {
+        if (!walletAddress) return
+
+        try {
+            const response = await stakeApi.getTotalRoyaltiesEarned(walletAddress)
+            setTotalRoyaltiesEarned(response.totalRoyaltiesEarned)
+        } catch (error) {
+            console.error("Error fetching total royalties:", error)
+        }
+    }
+
     // Fetch staked riffs when support tab is active or wallet changes
     useEffect(() => {
         if (activeTab === "support" && walletAddress) {
             fetchStakedRiffs()
+            fetchTotalRoyalties()
         }
     }, [activeTab, walletAddress])
+
+    // Claim royalties for all unlocked staked riffs
+    const handleClaimRoyalties = async () => {
+        if (!walletAddress || stakedRiffs.length === 0) return
+
+        setIsClaimingRoyalties(true)
+        try {
+            // Filter unlocked staked riffs that have royalties to claim
+            const claimableRiffs = stakedRiffs.filter(riff => 
+                riff.status === "unlocked"
+            )
+
+            if (claimableRiffs.length === 0) {
+                toast({
+                    title: "No Royalties to Claim",
+                    description: "You don't have any unlocked royalties to claim at the moment.",
+                })
+                return
+            }
+
+            // Import contract service
+            const { contractService } = await import('@/lib/contracts')
+            
+            const claimedAmounts: Array<{ stakeId: number; amount: number }> = []
+            let totalClaimed = 0
+
+            // Step 1: Call smart contract claimRewards for each unlocked riff
+            for (const claimableRiff of claimableRiffs) {
+                try {
+                    console.log(`Claiming rewards for riff ${claimableRiff.riffId}...`)
+                    
+                    // Call the smart contract claimRewards function
+                    const contractResult = await contractService.claimRewards(claimableRiff.tokenId.toString())
+                    
+                    console.log(`Smart contract claim successful for riff ${claimableRiff.riffId}:`, contractResult)
+                    
+                    // Add to claimed amounts array
+                    claimedAmounts.push({
+                        stakeId: claimableRiff.id,
+                        amount: claimableRiff.royaltiesEarned
+                    })
+                    
+                    totalClaimed += claimableRiff.royaltiesEarned
+                    
+                } catch (error: any) {
+                    console.error(`Error claiming rewards for riff ${claimableRiff.riffId}:`, error)
+                    toast({
+                        variant: "destructive",
+                        title: "Claim Failed",
+                        description: `Failed to claim rewards for ${claimableRiff.title}: ${error.message}`,
+                    })
+                }
+            }
+
+            if (claimedAmounts.length === 0) {
+                toast({
+                    title: "No Claims Processed",
+                    description: "No royalties were successfully claimed from the smart contract.",
+                })
+                return
+            }
+
+            // Step 2: Update backend with claimed amounts
+            console.log("Updating backend with claimed amounts...")
+            await stakeApi.claimRoyalties(walletAddress, claimedAmounts)
+            
+            // Step 3: Refresh staked riffs data and total royalties
+            await fetchStakedRiffs()
+            await fetchTotalRoyalties()
+
+            toast({
+                title: "Royalties Claimed Successfully",
+                description: `Successfully claimed ${totalClaimed.toFixed(1)} RIFF in royalties from ${claimedAmounts.length} riffs.`,
+            })
+
+        } catch (error: any) {
+            console.error("Error claiming royalties:", error)
+            toast({
+                variant: "destructive",
+                title: "Claim Failed",
+                description: error.message || "Failed to claim royalties. Please try again.",
+            })
+        } finally {
+            setIsClaimingRoyalties(false)
+        }
+    }
+
+    // Unstake from a specific riff
+    const handleUnstake = async (stakeId: number, tokenId: number, riffTitle: string) => {
+        if (!walletAddress) return
+
+        setUnstakingStakeId(stakeId)
+        try {
+            // Step 1: Call smart contract unstakeFromRiff function
+            console.log(`Unstaking from riff ${tokenId}...`)
+            
+            // Import contract service
+            const { contractService } = await import('@/lib/contracts')
+            
+            // Call the smart contract unstakeFromRiff function
+            const contractResult = await contractService.unstakeFromRiff(tokenId.toString())
+            
+            console.log(`Smart contract unstake successful for riff ${tokenId}:`, contractResult)
+            
+            // Step 2: Update backend
+            console.log("Updating backend after unstake...")
+            const backendResult = await stakeApi.unstakeFromStake(stakeId, walletAddress)
+            
+            console.log("Backend update successful:", backendResult)
+            
+            // Step 3: Refresh staked riffs data and total royalties
+            await fetchStakedRiffs()
+            await fetchTotalRoyalties()
+
+            toast({
+                title: "Unstaked Successfully",
+                description: `Successfully unstaked from "${riffTitle}". Transaction hash: ${contractResult.hash}`,
+            })
+
+        } catch (error: any) {
+            console.error("Error unstaking:", error)
+            toast({
+                variant: "destructive",
+                title: "Unstake Failed",
+                description: error.message || "Failed to unstake. Please try again.",
+            })
+        } finally {
+            setUnstakingStakeId(null)
+        }
+    }
 
     if (!isConnected) {
         return (
@@ -282,7 +429,7 @@ export default function ProfilePage() {
                                                 },
                                                 {
                                                     title: "Royalties Earned",
-                                                    value: stakedRiffs.reduce((sum, riff) => sum + riff.royaltiesEarned, 0).toFixed(1),
+                                                    value: totalRoyaltiesEarned.toFixed(1),
                                                     unit: "RIFF",
                                                     icon: DollarSign,
                                                     color: "green",
@@ -416,8 +563,20 @@ export default function ProfilePage() {
                                                                                 </Tooltip>
                                                                             </TooltipProvider>
                                                                         ) : (
-                                                                            <Button size="sm" className="bg-violet-600 hover:bg-violet-700">
-                                                                                Unstake
+                                                                            <Button 
+                                                                                size="sm" 
+                                                                                className="bg-violet-600 hover:bg-violet-700" 
+                                                                                onClick={() => handleUnstake(riff.id, riff.tokenId, riff.title)}
+                                                                                disabled={unstakingStakeId === riff.id}
+                                                                            >
+                                                                                {unstakingStakeId === riff.id ? (
+                                                                                    <>
+                                                                                        <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent mr-1"></div>
+                                                                                        Unstaking...
+                                                                                    </>
+                                                                                ) : (
+                                                                                    "Unstake"
+                                                                                )}
                                                                             </Button>
                                                                         )}
                                                                     </td>
@@ -434,10 +593,29 @@ export default function ProfilePage() {
                                                         <Info className="h-4 w-4" />
                                                         <p className="text-sm">Royalties are distributed monthly based on your stake percentage.</p>
                                                     </div>
-                                                    <Button className="bg-green-600 hover:bg-green-700">
-                                                        Claim Royalties
-                                                        <DollarSign className="ml-2 h-4 w-4" />
-                                                    </Button>
+                                                    {stakedRiffs.some(riff => riff.status === "unlocked" && riff.royaltiesEarned > 0) ? (
+                                                        <Button 
+                                                            className="bg-green-600 hover:bg-green-700" 
+                                                            onClick={handleClaimRoyalties}
+                                                            disabled={isClaimingRoyalties}
+                                                        >
+                                                            {isClaimingRoyalties ? (
+                                                                <>
+                                                                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+                                                                    Claiming...
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    Claim Royalties
+                                                                    <DollarSign className="ml-2 h-4 w-4" />
+                                                                </>
+                                                            )}
+                                                        </Button>
+                                                    ) : (
+                                                        <div className="text-zinc-400 text-sm">
+                                                            No royalties available to claim
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>

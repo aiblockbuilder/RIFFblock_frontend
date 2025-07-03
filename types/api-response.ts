@@ -180,7 +180,9 @@ export interface StakingSettings {
 }
 
 export interface StakedRiff {
-    id: string;
+    id: number;
+    riffId: number;
+    tokenId: number;
     title: string;
     artist: string;
     image: string;
