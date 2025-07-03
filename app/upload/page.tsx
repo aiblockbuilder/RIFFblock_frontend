@@ -129,6 +129,7 @@ export default function UploadPage() {
                 setIsLoadingCollections(true)
                 try {
                     const response = await collectionApi.getAllCollections(walletAddress)
+                    console.log("Collections:", response)
                     setCollections(response)
                 } catch (error) {
                     console.error("Error fetching collections:", error)
@@ -587,29 +588,29 @@ export default function UploadPage() {
                     instrument,
                     keySignature,
                     timeSignature,
-                    isBargainBin: String(isBargainBin),
-                    price: price || "0",
+                    isBargainBin: isBargainBin, // Send as boolean
+                    price: price ? parseFloat(price) : 0, // Send as number
                     currency,
-                    royaltyPercentage: String(royaltyPercentage),
-                    isStakable: String(enableStaking),
-                    stakingRoyaltyShare: String(customRoyaltyShare),
-                    minimumStakeAmount: String(minimumStakeAmount),
-                    lockPeriodDays: String(lockPeriodDays),
-                    useProfileDefaults: String(useProfileDefaults),
-                    unlockSourceFiles: String(unlockSourceFiles),
-                    unlockRemixRights: String(unlockRemixRights),
-                    unlockPrivateMessages: String(unlockPrivateMessages),
-                    unlockBackstageContent: String(unlockBackstageContent),
+                    royaltyPercentage: royaltyPercentage, // Send as number
+                    isStakable: enableStaking, // Send as boolean
+                    stakingRoyaltyShare: customRoyaltyShare, // Send as number
+                    minimumStakeAmount: minimumStakeAmount, // Send as number
+                    lockPeriodDays: lockPeriodDays, // Send as number
+                    useProfileDefaults: useProfileDefaults, // Send as boolean
+                    unlockSourceFiles: unlockSourceFiles, // Send as boolean
+                    unlockRemixRights: unlockRemixRights, // Send as boolean
+                    unlockPrivateMessages: unlockPrivateMessages, // Send as boolean
+                    unlockBackstageContent: unlockBackstageContent, // Send as boolean
                     walletAddress,
-                    duration: fileDuration ? String(fileDuration) : undefined,
+                    duration: fileDuration || null, // Send as number or null
                     // IPFS data
                     audioCid,
                     coverCid,
                     metadataUrl,
                     // NFT data if minted
-                    isNft: tokenId ? "true" : "false",
-                    tokenId: tokenId || undefined,
-                    contractAddress: contractAddress || undefined,
+                    isNft: tokenId ? true : false, // Send as boolean
+                    tokenId: tokenId || null,
+                    contractAddress: contractAddress || null,
                 }
 
                 // Add collection data
@@ -617,9 +618,10 @@ export default function UploadPage() {
                     riffData.newCollectionName = newCollectionName
                     riffData.newCollectionDescription = newCollectionDescription
                 } else if (collection === "existing" && selectedCollectionId) {
-                    riffData.collectionId = selectedCollectionId
+                    riffData.collectionId = parseInt(selectedCollectionId) // Send as number
                 }
 
+                console.log("Sending riff data to backend:", riffData)
                 const response = await nftApi.createRiff(walletAddress, riffData)
                 
                 toast({
@@ -634,6 +636,13 @@ export default function UploadPage() {
             } catch (error: any) {
                 console.error("Upload error:", error)
                 
+                // Log detailed error information
+                if (error.response) {
+                    console.error("Response data:", error.response.data)
+                    console.error("Response status:", error.response.status)
+                    console.error("Response headers:", error.response.headers)
+                }
+                
                 if (retryCount < maxRetries) {
                     retryCount++
                     const delay = Math.pow(2, retryCount) * 1000 // Exponential backoff
@@ -646,9 +655,20 @@ export default function UploadPage() {
                     return uploadWithRetry()
                 }
                 
+                // Show more specific error message
+                let errorMessage = "Failed to upload riff. Please try again."
+                if (error.response?.data?.errors) {
+                    const validationErrors = error.response.data.errors
+                    errorMessage = `Validation errors: ${validationErrors.map((err: any) => err.msg).join(', ')}`
+                } else if (error.response?.data?.error) {
+                    errorMessage = error.response.data.error
+                } else if (error.message) {
+                    errorMessage = error.message
+                }
+                
                 toast({
                     title: "Upload Failed",
-                    description: error.message || "Failed to upload riff. Please try again.",
+                    description: errorMessage,
                     variant: "destructive",
                 })
             } finally {
@@ -1085,6 +1105,7 @@ export default function UploadPage() {
                                                     </SelectTrigger>
                                                     <SelectContent className="bg-zinc-900 border-zinc-800">
                                                         {collections.map((collection) => (
+                                                            console.log("map -> ", collection.id.toString()),
                                                             <SelectItem key={collection.id} value={collection.id.toString()}>
                                                                 {collection.name}
                                                             </SelectItem>
@@ -1251,6 +1272,7 @@ export default function UploadPage() {
 
     // Render monetization step
     const renderMonetizationStep = () => {
+        console.log(">>> selectedCollectionId -> ", selectedCollectionId)
         return (
             <div className="space-y-8">
                 <div className="text-center">

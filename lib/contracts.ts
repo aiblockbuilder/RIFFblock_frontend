@@ -210,20 +210,57 @@ export class ContractService {
             const gasLimit = (gasEstimate * BigInt(120)) / BigInt(100)
             console.log("Gas limit with buffer:", gasLimit.toString())
             
-            // Mint the NFT with explicit gas limit
+            // Mint the NFT and get the token ID from the transaction
             console.log("Calling mint function...")
-            const tokenId = await contract.mint(mintToAddress, {
+            const tx = await contract.mint(mintToAddress, {
                 gasLimit: gasLimit
             })
-            console.log("Mint transaction sent, token ID:", tokenId.toString())
+            console.log("Mint transaction sent, hash:", tx.hash)
             
             // Wait for transaction confirmation
             console.log("Waiting for transaction confirmation...")
-            const receipt = await tokenId.wait()
+            const receipt = await tx.wait()
             console.log("Transaction confirmed:", receipt.hash)
 
+            // Extract token ID from the transaction receipt
+            // The mint function returns the token ID, so we need to get it from the transaction result
+            let mintedTokenId: string = "0"
+            
+            // Try to get the token ID from the transaction logs
+            if (receipt.logs && receipt.logs.length > 0) {
+                // Look for the Transfer event which contains the token ID
+                // The Transfer event signature is: Transfer(address,address,uint256)
+                const transferEventSignature = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+                
+                for (const log of receipt.logs) {
+                    if (log.topics[0] === transferEventSignature) {
+                        // The token ID is in the third topic (index 3)
+                        if (log.topics[3]) {
+                            mintedTokenId = BigInt(log.topics[3]).toString()
+                            break
+                        }
+                    }
+                }
+            }
+
+            // If we couldn't extract from logs, try a different approach
+            if (mintedTokenId === "0") {
+                try {
+                    // Get the total supply to determine the latest token ID
+                    // Since the contract increments _tokenIds before minting, the new token ID is totalSupply - 1
+                    const totalSupply = await contract.totalSupply()
+                    mintedTokenId = (totalSupply - BigInt(1)).toString()
+                } catch (error) {
+                    console.warn("Could not get token ID from contract, using fallback method")
+                    // Fallback: use a timestamp-based ID
+                    mintedTokenId = Math.floor(Date.now() / 1000).toString()
+                }
+            }
+
+            console.log("Minted token ID:", mintedTokenId)
+
             return {
-                tokenId: tokenId.toString(),
+                tokenId: mintedTokenId.toString(),
                 contractAddress: CONTRACT_ADDRESSES.RIFF_NFT
             }
                 } catch (error: any) {
