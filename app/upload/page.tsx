@@ -40,6 +40,7 @@ import NetworkStatus from "@/components/network-status"
 import { nftApi, collectionApi, userApi } from "@/lib/api-client"
 import { contractService } from "@/lib/contracts"
 import { pinataService } from "@/lib/pinata-service"
+import { ethers } from "ethers"
 import { GENRES, MOODS, INSTRUMENTS, KEY_SIGNATURES, TIME_SIGNATURES, type Genre, type Mood, type Instrument, type KeySignature, type TimeSignature } from "@/constants/riff-options"
 
 // Define the steps in the upload process
@@ -540,7 +541,7 @@ export default function UploadPage() {
                         })
 
                         // Mint NFT using smart contract
-                        const mintResult = await contractService.mintRiffNFT()
+                        const mintResult = await mintNFT()
                         tokenId = mintResult.tokenId // tokenId is already a string from contract service
                         contractAddress = mintResult.contractAddress
                         console.log("NFT minted successfully:", tokenId, contractAddress)
@@ -682,6 +683,31 @@ export default function UploadPage() {
     // Mint NFT using smart contract
     const mintNFT = async (): Promise<{ tokenId: string; contractAddress: string }> => {
         try {
+            // Debug: Check contract status first
+            console.log("=== CONTRACT DEBUG INFO ===")
+            try {
+                const validation = await contractService.validateContract()
+                console.log("Contract validation:", validation)
+            } catch (validationError) {
+                console.error("Contract validation failed:", validationError)
+            }
+
+            try {
+                const mintPrice = await contractService.getMintPrice()
+                console.log("Mint price:", mintPrice, "wei")
+            } catch (priceError) {
+                console.error("Failed to get mint price:", priceError)
+            }
+
+            try {
+                const mintingEnabled = await contractService.isMintingEnabled()
+                console.log("Minting enabled:", mintingEnabled)
+            } catch (mintingError) {
+                console.error("Failed to check minting status:", mintingError)
+            }
+
+            console.log("=== END DEBUG INFO ===")
+
             // Create NFT metadata
             const metadata = {
                 name: title,
@@ -714,8 +740,24 @@ export default function UploadPage() {
             // In production, you would upload this metadata to IPFS
             const tokenURI = `ipfs://mock-cid-${Date.now()}`
 
-            // Mint the NFT using the contract service
-            const result = await contractService.mintRiffNFT(tokenURI)
+            // Calculate revenue split percentages based on staking settings
+            const stakerRewardPercentage = enableStaking ? parseInt(customRoyaltyShare.toString()) : 0
+            const platformFeePercentage = 5 // Default 5% platform fee
+            const lockPeriodDaysValue = parseInt(lockPeriodDays.toString()) || 30
+
+            console.log("Minting with parameters:")
+            console.log("- Token URI:", tokenURI)
+            console.log("- Staker reward percentage:", stakerRewardPercentage)
+            console.log("- Platform fee percentage:", platformFeePercentage)
+            console.log("- Lock period days:", lockPeriodDaysValue)
+
+            // Mint the NFT using the contract service with revenue split configuration
+            const result = await contractService.mintRiffNFT(
+                tokenURI,
+                stakerRewardPercentage,
+                platformFeePercentage,
+                lockPeriodDaysValue
+            )
             
             return result
         } catch (error: any) {

@@ -15,16 +15,6 @@
                 "internalType": "address",
                 "name": "_platformWallet",
                 "type": "address"
-            },
-            {
-                "internalType": "uint256",
-                "name": "_platformFee",
-                "type": "uint256"
-            },
-            {
-                "internalType": "uint256",
-                "name": "_stakersShare",
-                "type": "uint256"
             }
         ],
         "stateMutability": "nonpayable",
@@ -190,33 +180,7 @@
     },
     {
         "inputs": [],
-        "name": "LOCK_DURATION",
-        "outputs": [
-            {
-                "internalType": "uint256",
-                "name": "",
-                "type": "uint256"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [],
         "name": "MIN_STAKE_AMOUNT",
-        "outputs": [
-            {
-                "internalType": "uint256",
-                "name": "",
-                "type": "uint256"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [],
-        "name": "artistSharePercentage",
         "outputs": [
             {
                 "internalType": "uint256",
@@ -288,6 +252,40 @@
                 "internalType": "uint256",
                 "name": "_tokenId",
                 "type": "uint256"
+            }
+        ],
+        "name": "getNFTRevenueSplit",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "stakerRewardPercentage",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "platformFeePercentage",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "artistSharePercentage",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "lockPeriodDays",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "_tokenId",
+                "type": "uint256"
             },
             {
                 "internalType": "address",
@@ -324,19 +322,6 @@
                 "internalType": "address",
                 "name": "",
                 "type": "address"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [],
-        "name": "platformFeePercentage",
-        "outputs": [
-            {
-                "internalType": "uint256",
-                "name": "",
-                "type": "uint256"
             }
         ],
         "stateMutability": "view",
@@ -429,7 +414,7 @@
         "name": "riffNFT",
         "outputs": [
             {
-                "internalType": "contract IERC721",
+                "internalType": "contract RiffNFT",
                 "name": "",
                 "type": "address"
             }
@@ -495,19 +480,6 @@
         "name": "stakeOnRiff",
         "outputs": [],
         "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
-        "inputs": [],
-        "name": "stakersSharePercentage",
-        "outputs": [
-            {
-                "internalType": "uint256",
-                "name": "",
-                "type": "uint256"
-            }
-        ],
-        "stateMutability": "view",
         "type": "function"
     },
     {
@@ -579,4 +551,4 @@
         "stateMutability": "view",
         "type": "function"
     }
-] 
+]
