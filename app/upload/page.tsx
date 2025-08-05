@@ -537,10 +537,15 @@ export default function UploadPage() {
 
                         toast({
                             title: "Contract Valid",
-                            description: "Smart contract is ready for minting.",
+                            description: "Smart contract is ready for minting. Retry logic is active for network issues.",
                         })
 
-                        // Mint NFT using smart contract
+                        // Mint NFT using smart contract with retry logic
+                        toast({
+                            title: "Minting NFT",
+                            description: "Minting your NFT with automatic retry for network issues...",
+                        })
+                        
                         const mintResult = await mintNFT()
                         tokenId = mintResult.tokenId // tokenId is already a string from contract service
                         contractAddress = mintResult.contractAddress
@@ -565,15 +570,19 @@ export default function UploadPage() {
                             errorMessage = "Transaction was rejected by user. Please try again."
                         } else if (mintError.message.includes("gas")) {
                             errorMessage = "Transaction failed due to insufficient gas. Please try again with higher gas limit."
+                        } else if (mintError.message.includes("missing trie node") || mintError.message.includes("Internal JSON-RPC error") || mintError.message.includes("-32603")) {
+                            errorMessage = "Network connection issue. The system will automatically retry. Please wait..."
+                        } else if (mintError.message.includes("could not coalesce error")) {
+                            errorMessage = "Blockchain network is temporarily unavailable. Please try again in a few moments."
                         }
                         
                         toast({
                             title: "Minting Failed",
                             description: errorMessage,
                             variant: "destructive",
-                        })
-                        setIsMinting(false)
-                        setIsUploading(false)
+                        });
+                        setIsMinting(false);
+                        setIsUploading(false);
                         return
                     } finally {
                         setIsMinting(false)

@@ -23,17 +23,16 @@ const AMOY_TESTNET = {
     },
     rpcUrls: [
         "https://rpc.ankr.com/polygon_amoy/e66a6d9da101e8bd10b871515a03caa7704dbf170fe10daffb691ff78d15843a",
-        "https://rpc.ankr.com/polygon_amoy",
         "https://polygon-amoy-bor.publicnode.com"
     ],
     blockExplorerUrls: ["https://www.oklink.com/amoy"],
 }
 
-// Contract addresses - replace with your deployed contract addresses
+// Contract addresses - deployed on Amoy testnet
 const CONTRACT_ADDRESSES = {
-    RIFF_NFT: process.env.NEXT_PUBLIC_RIFF_NFT_ADDRESS || "",
-    RIFF_STAKING: process.env.NEXT_PUBLIC_RIFF_STAKING_ADDRESS || "",
-    RIFF_TOKEN: process.env.NEXT_PUBLIC_RIFF_TOKEN_ADDRESS || ""
+    RIFF_NFT: process.env.NEXT_PUBLIC_RIFF_NFT_ADDRESS || "0x56e32342D64a5D1ac9349eA18af6232DB41b0F20",
+    RIFF_STAKING: process.env.NEXT_PUBLIC_RIFF_STAKING_ADDRESS || "0xCf04c4C46744F867D301E4243AF89A58ffFb1292",
+    RIFF_TOKEN: process.env.NEXT_PUBLIC_RIFF_TOKEN_ADDRESS || "0x963c4c0090831fcadba1fb7163efdde582f8de94"
 }
 
 export class ContractService {
@@ -121,61 +120,115 @@ export class ContractService {
     }
 
     /**
-     * Validate that the contract exists and is accessible
+     * Validate that the contract exists and is accessible with retry logic
      * @returns Promise with validation result
      */
     async validateContract(): Promise<{ valid: boolean; message: string }> {
-        try {
-            const signer = await this.getSigner()
-            if (!signer) {
-                return { valid: false, message: "No signer available. Please connect your wallet." }
-            }
+        const maxRetries = 3
+        const baseDelay = 1000 // 1 second
 
-            console.log("Validating contract at address:", CONTRACT_ADDRESSES.RIFF_NFT)
-
-            const contract = new ethers.Contract(CONTRACT_ADDRESSES.RIFF_NFT, RIFF_NFT_ABI, signer)
-            
-            // Try to get the contract code to check if it exists
-            const code = await signer.provider?.getCode(CONTRACT_ADDRESSES.RIFF_NFT)
-            if (code === "0x") {
-                return { 
-                    valid: false, 
-                    message: `No contract found at address ${CONTRACT_ADDRESSES.RIFF_NFT}. Please check the contract address.` 
-                }
-            }
-
-            console.log("Contract code found:", code.substring(0, 66) + "...")
-
-            // Try to call name() to validate the ABI (this is a standard ERC721 function)
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
-                const name = await contract.name()
-                console.log("Contract validation successful. Contract name:", name)
+                const signer = await this.getSigner()
+                if (!signer) {
+                    return { valid: false, message: "No signer available. Please connect your wallet." }
+                }
+
+                console.log(`Validating contract at address: ${CONTRACT_ADDRESSES.RIFF_NFT} (attempt ${attempt}/${maxRetries})`)
+
+                const contract = new ethers.Contract(CONTRACT_ADDRESSES.RIFF_NFT, RIFF_NFT_ABI, signer)
                 
-                // Also check if minting is enabled
-                try {
-                    const mintingEnabled = await contract.mintingEnabled()
-                    console.log("Minting enabled:", mintingEnabled)
-                    
-                    if (mintingEnabled) {
-                        const mintPrice = await contract.mintPrice()
-                        console.log("Mint price:", ethers.formatEther(mintPrice), "MATIC")
+                // Try to get the contract code to check if it exists
+                const code = await signer.provider?.getCode(CONTRACT_ADDRESSES.RIFF_NFT)
+                if (code === "0x") {
+                    return { 
+                        valid: false, 
+                        message: `No contract found at address ${CONTRACT_ADDRESSES.RIFF_NFT}. Please check the contract address.` 
                     }
-                } catch (mintError) {
-                    console.warn("Could not check minting status:", mintError)
+                }
+
+                console.log("Contract code found:", code.substring(0, 66) + "...")
+
+                // Try to call name() to validate the ABI (this is a standard ERC721 function)
+                try {
+                    const name = await contract.name()
+                    console.log("Contract validation successful. Contract name:", name)
+                    
+                    // Also check if minting is enabled
+                    try {
+                        const mintingEnabled = await contract.mintingEnabled()
+                        console.log("Minting enabled:", mintingEnabled)
+                        
+                        if (mintingEnabled) {
+                            const mintPrice = await contract.mintPrice()
+                            console.log("Mint price:", ethers.formatEther(mintPrice), "MATIC")
+                        }
+                    } catch (mintError) {
+                        console.warn("Could not check minting status:", mintError)
+                    }
+                    
+                    return { valid: true, message: "Contract is valid and accessible" }
+                } catch (error: any) {
+                    console.error("Contract ABI validation failed:", error)
+                    return { 
+                        valid: false, 
+                        message: `Contract exists but ABI doesn't match. Error: ${error.message}` 
+                    }
+                }
+            } catch (error: any) {
+                console.error(`Contract validation error (attempt ${attempt}/${maxRetries}):`, error)
+                
+                // Check if this is a retryable error
+                const isRetryableError = this.isRetryableError(error)
+                
+                if (attempt === maxRetries || !isRetryableError) {
+                    return { valid: false, message: `Validation failed: ${error.message}` }
                 }
                 
-                return { valid: true, message: "Contract is valid and accessible" }
-            } catch (error: any) {
-                console.error("Contract ABI validation failed:", error)
-                return { 
-                    valid: false, 
-                    message: `Contract exists but ABI doesn't match. Error: ${error.message}` 
+                // Wait before retrying with exponential backoff
+                const delay = baseDelay * Math.pow(2, attempt - 1)
+                console.log(`Retrying in ${delay}ms...`)
+                await new Promise(resolve => setTimeout(resolve, delay))
+                
+                // Try switching RPC endpoint before next attempt
+                try {
+                    console.log("Attempting to switch to a better RPC endpoint...")
+                    await this.switchToBestRpcEndpoint()
+                } catch (switchError) {
+                    console.warn("Failed to switch RPC endpoint:", switchError)
                 }
             }
-        } catch (error: any) {
-            console.error("Contract validation error:", error)
-            return { valid: false, message: `Validation failed: ${error.message}` }
         }
+        
+        return { valid: false, message: "Validation failed after all retry attempts" }
+    }
+
+    /**
+     * Check if an error is retryable (network/RPC related)
+     */
+    private isRetryableError(error: any): boolean {
+        const errorMessage = error.message?.toLowerCase() || ""
+        const errorCode = error.code?.toString() || ""
+        
+        // Retryable errors
+        const retryablePatterns = [
+            "missing trie node",
+            "internal json-rpc error",
+            "-32603",
+            "-32000",
+            "network error",
+            "timeout",
+            "connection refused",
+            "connection reset",
+            "econnreset",
+            "enetunreach",
+            "could not coalesce error",
+            "state is not available"
+        ]
+        
+        return retryablePatterns.some(pattern => 
+            errorMessage.includes(pattern) || errorCode.includes(pattern)
+        )
     }
 
     /**
@@ -240,10 +293,11 @@ export class ContractService {
 
             const contract = new ethers.Contract(CONTRACT_ADDRESSES.RIFF_NFT, RIFF_NFT_ABI, signer)
             
-            // Validate contract before proceeding
+            // Validate contract before proceeding with retry logic
+            console.log("Validating contract before minting...")
             const validation = await this.validateContract()
             if (!validation.valid) {
-                throw new Error(validation.message)
+                throw new Error(`Contract validation failed: ${validation.message}`)
             }
 
             // Get mint price from contract
@@ -332,24 +386,59 @@ export class ContractService {
 
             // Mint the NFT with revenue split configuration (use legacy transaction format)
             console.log("Calling mintRiff function...")
-            const tx = await contract.mintRiff(
-                mintToAddress,
-                tokenURI,
-                stakerRewardPercentage,
-                platformFeePercentage,
-                lockPeriodDays,
-                {
-                    value: mintPrice,
-                    gasLimit: gasLimit,
-                    gasPrice: gasPrice // Use explicit gasPrice for legacy transactions
-                }
-            )
-            console.log("Mint transaction sent, hash:", tx.hash)
             
-            // Wait for transaction confirmation
-            console.log("Waiting for transaction confirmation...")
-            const receipt = await tx.wait()
-            console.log("Transaction confirmed:", receipt.hash)
+            // Retry logic for the minting transaction
+            const mintMaxRetries = 3
+            const mintBaseDelay = 2000 // 2 seconds for minting
+            let receipt: any = null
+            
+            for (let mintAttempt = 1; mintAttempt <= mintMaxRetries; mintAttempt++) {
+                try {
+                    const tx = await contract.mintRiff(
+                        mintToAddress,
+                        tokenURI,
+                        stakerRewardPercentage,
+                        platformFeePercentage,
+                        lockPeriodDays,
+                        {
+                            value: mintPrice,
+                            gasLimit: gasLimit,
+                            gasPrice: gasPrice // Use explicit gasPrice for legacy transactions
+                        }
+                    )
+                    console.log(`Mint transaction sent (attempt ${mintAttempt}/${mintMaxRetries}), hash:`, tx.hash)
+                    
+                    // Wait for transaction confirmation
+                    console.log("Waiting for transaction confirmation...")
+                    receipt = await tx.wait()
+                    console.log("Transaction confirmed:", receipt.hash)
+                    
+                    // If we get here, the transaction was successful
+                    break
+                } catch (mintError: any) {
+                    console.error(`Mint transaction failed (attempt ${mintAttempt}/${mintMaxRetries}):`, mintError)
+                    
+                    if (mintAttempt === mintMaxRetries || !this.isRetryableError(mintError)) {
+                        throw mintError
+                    }
+                    
+                    const delay = mintBaseDelay * Math.pow(2, mintAttempt - 1)
+                    console.log(`Retrying mint transaction in ${delay}ms...`)
+                    await new Promise(resolve => setTimeout(resolve, delay))
+                    
+                    // Try switching RPC endpoint before next attempt
+                    try {
+                        console.log("Attempting to switch to a better RPC endpoint before retry...")
+                        await this.switchToBestRpcEndpoint()
+                    } catch (switchError) {
+                        console.warn("Failed to switch RPC endpoint:", switchError)
+                    }
+                }
+            }
+            
+            if (!receipt) {
+                throw new Error("Failed to complete minting transaction after all retry attempts")
+            }
 
             // Extract token ID from the transaction receipt
             // The mintRiff function returns the token ID, so we need to get it from the transaction result
@@ -497,43 +586,75 @@ export class ContractService {
     }
 
     /**
-     * Get the current mint price from the NFT contract
+     * Get the current mint price from the NFT contract with retry logic
      * @returns Promise with mint price in wei
      */
     async getMintPrice(): Promise<string> {
-        try {
-            const signer = await this.getSigner()
-            if (!signer) {
-                throw new Error("No signer available. Please connect your wallet.")
-            }
+        const maxRetries = 3
+        const baseDelay = 1000
 
-            const contract = new ethers.Contract(CONTRACT_ADDRESSES.RIFF_NFT, RIFF_NFT_ABI, signer)
-            const mintPrice = await contract.mintPrice()
-            return mintPrice.toString()
-        } catch (error: any) {
-            console.error("Error getting mint price:", error)
-            throw new Error(error.message || "Failed to get mint price")
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                const signer = await this.getSigner()
+                if (!signer) {
+                    throw new Error("No signer available. Please connect your wallet.")
+                }
+
+                console.log(`Getting mint price (attempt ${attempt}/${maxRetries})`)
+                const contract = new ethers.Contract(CONTRACT_ADDRESSES.RIFF_NFT, RIFF_NFT_ABI, signer)
+                const mintPrice = await contract.mintPrice()
+                console.log("Mint price retrieved successfully:", mintPrice.toString())
+                return mintPrice.toString()
+            } catch (error: any) {
+                console.error(`Error getting mint price (attempt ${attempt}/${maxRetries}):`, error)
+                
+                if (attempt === maxRetries || !this.isRetryableError(error)) {
+                    throw new Error(error.message || "Failed to get mint price")
+                }
+                
+                const delay = baseDelay * Math.pow(2, attempt - 1)
+                console.log(`Retrying getMintPrice in ${delay}ms...`)
+                await new Promise(resolve => setTimeout(resolve, delay))
+            }
         }
+        
+        throw new Error("Failed to get mint price after all retry attempts")
     }
 
     /**
-     * Check if minting is currently enabled on the NFT contract
+     * Check if minting is currently enabled on the NFT contract with retry logic
      * @returns Promise with boolean indicating if minting is enabled
      */
     async isMintingEnabled(): Promise<boolean> {
-        try {
-            const signer = await this.getSigner()
-            if (!signer) {
-                throw new Error("No signer available. Please connect your wallet.")
-            }
+        const maxRetries = 3
+        const baseDelay = 1000
 
-            const contract = new ethers.Contract(CONTRACT_ADDRESSES.RIFF_NFT, RIFF_NFT_ABI, signer)
-            const mintingEnabled = await contract.mintingEnabled()
-            return mintingEnabled
-        } catch (error: any) {
-            console.error("Error checking minting status:", error)
-            throw new Error(error.message || "Failed to check minting status")
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                const signer = await this.getSigner()
+                if (!signer) {
+                    throw new Error("No signer available. Please connect your wallet.")
+                }
+
+                console.log(`Checking minting status (attempt ${attempt}/${maxRetries})`)
+                const contract = new ethers.Contract(CONTRACT_ADDRESSES.RIFF_NFT, RIFF_NFT_ABI, signer)
+                const mintingEnabled = await contract.mintingEnabled()
+                console.log("Minting status retrieved successfully:", mintingEnabled)
+                return mintingEnabled
+            } catch (error: any) {
+                console.error(`Error checking minting status (attempt ${attempt}/${maxRetries}):`, error)
+                
+                if (attempt === maxRetries || !this.isRetryableError(error)) {
+                    throw new Error(error.message || "Failed to check minting status")
+                }
+                
+                const delay = baseDelay * Math.pow(2, attempt - 1)
+                console.log(`Retrying isMintingEnabled in ${delay}ms...`)
+                await new Promise(resolve => setTimeout(resolve, delay))
+            }
         }
+        
+        throw new Error("Failed to check minting status after all retry attempts")
     }
 
     /**
