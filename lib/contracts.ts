@@ -23,7 +23,6 @@ const AMOY_TESTNET = {
     },
     rpcUrls: [
         "https://rpc.ankr.com/polygon_amoy/e66a6d9da101e8bd10b871515a03caa7704dbf170fe10daffb691ff78d15843a",
-        "https://rpc.ankr.com/polygon_amoy",
         "https://polygon-amoy-bor.publicnode.com"
     ],
     blockExplorerUrls: ["https://www.oklink.com/amoy"],
@@ -32,7 +31,7 @@ const AMOY_TESTNET = {
 // Contract addresses - deployed on Amoy testnet
 const CONTRACT_ADDRESSES = {
     RIFF_NFT: process.env.NEXT_PUBLIC_RIFF_NFT_ADDRESS || "0x56e32342D64a5D1ac9349eA18af6232DB41b0F20",
-    RIFF_STAKING: process.env.NEXT_PUBLIC_RIFF_STAKING_ADDRESS || "",
+    RIFF_STAKING: process.env.NEXT_PUBLIC_RIFF_STAKING_ADDRESS || "0xCf04c4C46744F867D301E4243AF89A58ffFb1292",
     RIFF_TOKEN: process.env.NEXT_PUBLIC_RIFF_TOKEN_ADDRESS || "0x963c4c0090831fcadba1fb7163efdde582f8de94"
 }
 
