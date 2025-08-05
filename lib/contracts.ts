@@ -23,7 +23,9 @@ const AMOY_TESTNET = {
     },
     rpcUrls: [
         "https://rpc.ankr.com/polygon_amoy/e66a6d9da101e8bd10b871515a03caa7704dbf170fe10daffb691ff78d15843a",
-        "https://polygon-amoy-bor.publicnode.com"
+        "https://polygon-amoy-bor.publicnode.com",
+        "https://polygon-amoy.drpc.org",
+        "https://polygon-amoy.public.blastapi.io"
     ],
     blockExplorerUrls: ["https://www.oklink.com/amoy"],
 }
@@ -138,41 +140,82 @@ export class ContractService {
 
                 const contract = new ethers.Contract(CONTRACT_ADDRESSES.RIFF_NFT, RIFF_NFT_ABI, signer)
                 
-                // Try to get the contract code to check if it exists
-                const code = await signer.provider?.getCode(CONTRACT_ADDRESSES.RIFF_NFT)
-                if (code === "0x") {
-                    return { 
-                        valid: false, 
-                        message: `No contract found at address ${CONTRACT_ADDRESSES.RIFF_NFT}. Please check the contract address.` 
-                    }
-                }
-
-                console.log("Contract code found:", code.substring(0, 66) + "...")
-
-                // Try to call name() to validate the ABI (this is a standard ERC721 function)
+                // First, try to validate using contract calls (more reliable than getCode)
                 try {
-                    const name = await contract.name()
-                    console.log("Contract validation successful. Contract name:", name)
+                    console.log("Attempting to validate contract using ABI calls...")
                     
-                    // Also check if minting is enabled
-                    try {
-                        const mintingEnabled = await contract.mintingEnabled()
-                        console.log("Minting enabled:", mintingEnabled)
-                        
-                        if (mintingEnabled) {
-                            const mintPrice = await contract.mintPrice()
-                            console.log("Mint price:", ethers.formatEther(mintPrice), "MATIC")
-                        }
-                    } catch (mintError) {
-                        console.warn("Could not check minting status:", mintError)
+                    // Try multiple contract calls to ensure ABI compatibility
+                    const validationPromises = [
+                        contract.name().catch(() => null),
+                        contract.symbol().catch(() => null),
+                        contract.mintingEnabled().catch(() => null),
+                        contract.mintPrice().catch(() => null)
+                    ]
+                    
+                    const [name, symbol, mintingEnabled, mintPrice] = await Promise.all(validationPromises)
+                    
+                    console.log("Contract validation successful:")
+                    console.log("- Contract name:", name)
+                    console.log("- Contract symbol:", symbol)
+                    console.log("- Minting enabled:", mintingEnabled)
+                    if (mintPrice) {
+                        console.log("- Mint price:", ethers.formatEther(mintPrice), "MATIC")
                     }
                     
-                    return { valid: true, message: "Contract is valid and accessible" }
-                } catch (error: any) {
-                    console.error("Contract ABI validation failed:", error)
-                    return { 
-                        valid: false, 
-                        message: `Contract exists but ABI doesn't match. Error: ${error.message}` 
+                    // If we can call basic functions, the contract is valid
+                    if (name && symbol) {
+                        return { valid: true, message: "Contract is valid and accessible" }
+                    } else {
+                        throw new Error("Contract ABI validation failed - missing basic ERC721 functions")
+                    }
+                } catch (abiError: any) {
+                    console.log("ABI validation failed, trying getCode method...")
+                    
+                    // If ABI validation fails, try getCode as fallback
+                    try {
+                        const code = await signer.provider?.getCode(CONTRACT_ADDRESSES.RIFF_NFT)
+                        if (code === "0x") {
+                            return { 
+                                valid: false, 
+                                message: `No contract found at address ${CONTRACT_ADDRESSES.RIFF_NFT}. Please check the contract address.` 
+                            }
+                        }
+
+                        console.log("Contract code found:", code.substring(0, 66) + "...")
+                        
+                        // If we got code but ABI failed, it might be a different contract
+                        return { 
+                            valid: false, 
+                            message: `Contract exists at address ${CONTRACT_ADDRESSES.RIFF_NFT} but ABI doesn't match. Please verify this is the correct RIFF NFT contract.` 
+                        }
+                    } catch (getCodeError: any) {
+                        console.error("Error getting contract code:", getCodeError)
+                        
+                        // Handle "missing trie node" errors specifically
+                        if (getCodeError.message?.toLowerCase().includes("missing trie node") || 
+                            getCodeError.message?.toLowerCase().includes("state is not available")) {
+                            
+                            console.log("RPC node has sync issues, trying alternative validation...")
+                            
+                            // Try to switch to a better RPC endpoint and retry
+                            if (attempt < maxRetries) {
+                                try {
+                                    console.log("Switching to better RPC endpoint due to sync issues...")
+                                    await this.switchToBestRpcEndpoint()
+                                    continue // Retry with new endpoint
+                                } catch (switchError) {
+                                    console.warn("Failed to switch RPC endpoint:", switchError)
+                                }
+                            }
+                            
+                            return { 
+                                valid: false, 
+                                message: `Unable to verify contract at address ${CONTRACT_ADDRESSES.RIFF_NFT}. The RPC node is experiencing sync issues.\n\nPlease try:\n1. Refreshing the page\n2. Switching networks and back\n3. Trying again in a few minutes` 
+                            }
+                        }
+                        
+                        // For other getCode errors, throw to be handled by retry logic
+                        throw getCodeError
                     }
                 }
             } catch (error: any) {
@@ -810,6 +853,30 @@ export class ContractService {
     }
 
     /**
+     * Force refresh the provider connection
+     */
+    async refreshProvider(): Promise<void> {
+        try {
+            console.log("Refreshing provider connection...")
+            
+            if (typeof window !== 'undefined' && window.ethereum) {
+                // Reinitialize the provider
+                this.provider = new ethers.BrowserProvider(window.ethereum)
+                this.signer = await this.provider.getSigner()
+                
+                // Test the connection
+                await this.provider.getBlockNumber()
+                console.log("Provider connection refreshed successfully")
+            } else {
+                throw new Error("No ethereum provider available")
+            }
+        } catch (error: any) {
+            console.error("Failed to refresh provider:", error)
+            throw new Error("Failed to refresh provider connection")
+        }
+    }
+
+    /**
      * Check if currently on Amoy testnet
      */
     async isOnAmoyTestnet(): Promise<boolean> {
@@ -818,6 +885,83 @@ export class ContractService {
             return network?.chainId === "80002"
         } catch (error) {
             return false
+        }
+    }
+
+    /**
+     * Test contract connection and provide detailed status
+     */
+    async testContractConnection(): Promise<{ 
+        connected: boolean; 
+        network: string; 
+        contractExists: boolean; 
+        mintingEnabled: boolean; 
+        mintPrice: string; 
+        error?: string 
+    }> {
+        try {
+            // Check if wallet is connected
+            const signer = await this.getSigner()
+            if (!signer) {
+                return { 
+                    connected: false, 
+                    network: "Unknown", 
+                    contractExists: false, 
+                    mintingEnabled: false, 
+                    mintPrice: "0",
+                    error: "No wallet connected" 
+                }
+            }
+
+            // Check network
+            const network = await this.getCurrentNetwork()
+            const networkName = network?.name || "Unknown"
+
+            // Test contract validation
+            const validation = await this.validateContract()
+            if (!validation.valid) {
+                return { 
+                    connected: true, 
+                    network: networkName, 
+                    contractExists: false, 
+                    mintingEnabled: false, 
+                    mintPrice: "0",
+                    error: validation.message 
+                }
+            }
+
+            // Get contract details with comprehensive validation
+            const contract = new ethers.Contract(CONTRACT_ADDRESSES.RIFF_NFT, RIFF_NFT_ABI, signer)
+            
+            // Test multiple contract functions to ensure ABI compatibility
+            const [name, symbol, mintingEnabled, mintPrice] = await Promise.all([
+                contract.name().catch(() => null),
+                contract.symbol().catch(() => null),
+                contract.mintingEnabled().catch(() => null),
+                contract.mintPrice().catch(() => null)
+            ])
+            
+            // Check if contract has basic ERC721 functionality
+            const hasBasicERC721 = name && symbol
+            const hasCustomFunctions = mintingEnabled !== null && mintPrice !== null
+            
+            return {
+                connected: true,
+                network: networkName,
+                contractExists: hasBasicERC721 && hasCustomFunctions,
+                mintingEnabled: mintingEnabled || false,
+                mintPrice: mintPrice ? mintPrice.toString() : "0",
+                error: hasBasicERC721 && hasCustomFunctions ? undefined : "Contract ABI mismatch"
+            }
+        } catch (error: any) {
+            return {
+                connected: false,
+                network: "Unknown",
+                contractExists: false,
+                mintingEnabled: false,
+                mintPrice: "0",
+                error: error.message
+            }
         }
     }
 
@@ -910,21 +1054,42 @@ export class ContractService {
             const rpcTest = await this.testRpcEndpoints()
             console.log("Best RPC endpoint:", rpcTest.bestEndpoint, "Latency:", rpcTest.latency + "ms")
             
-            // Always try to use the best endpoint found
-            console.log("Switching to best RPC endpoint...")
-            const newProvider = new ethers.JsonRpcProvider(rpcTest.bestEndpoint)
+            // Test the best endpoint before switching
+            console.log("Testing best RPC endpoint...")
+            const testProvider = new ethers.JsonRpcProvider(rpcTest.bestEndpoint)
+            await testProvider.getBlockNumber()
+            console.log("Best RPC endpoint is working")
             
-            // Test the new provider
-            await newProvider.getBlockNumber()
-            console.log("New RPC endpoint is working")
+            // Update the provider to use the best endpoint
+            // Note: We can't directly change the BrowserProvider's RPC, but we can
+            // ensure the current provider is working and try to get a fresh connection
+            if (this.provider) {
+                try {
+                    // Test current provider
+                    await this.provider.getBlockNumber()
+                    console.log("Current provider is still working")
+                } catch (currentError) {
+                    console.log("Current provider failed, reinitializing...")
+                    // Reinitialize the provider
+                    this.provider = new ethers.BrowserProvider(window.ethereum)
+                    this.signer = await this.provider.getSigner()
+                }
+            }
             
-            // Update the provider
-            this.provider = new ethers.BrowserProvider(window.ethereum)
-            this.signer = await this.provider.getSigner()
-            console.log("Switched to new RPC endpoint")
+            console.log("RPC endpoint switch completed")
         } catch (error: any) {
             console.error("Failed to switch RPC endpoint:", error)
-            throw new Error("Unable to find a working RPC endpoint")
+            
+            // If all endpoints failed, try to reinitialize the current provider
+            try {
+                console.log("Attempting to reinitialize current provider...")
+                this.provider = new ethers.BrowserProvider(window.ethereum)
+                this.signer = await this.provider.getSigner()
+                console.log("Provider reinitialized")
+            } catch (reinitError) {
+                console.error("Failed to reinitialize provider:", reinitError)
+                throw new Error("Unable to find a working RPC endpoint. Please try refreshing the page.")
+            }
         }
     }
 }

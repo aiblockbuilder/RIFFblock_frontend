@@ -8,7 +8,7 @@ import type {
   ToastProps,
 } from "@/components/ui/toast"
 
-const TOAST_LIMIT = 1
+const TOAST_LIMIT = 5
 const TOAST_REMOVE_DELAY = 5000
 
 type ToasterToast = ToastProps & {
@@ -144,6 +144,8 @@ type Toast = Omit<ToasterToast, "id">
 
 function toast({ ...props }: Toast) {
   const id = genId()
+  
+  console.log("Toast function called with props:", props)
 
   const update = (props: ToasterToast) =>
     dispatch({
@@ -164,6 +166,8 @@ function toast({ ...props }: Toast) {
     },
   })
 
+  console.log("Toast dispatched with id:", id)
+
   return {
     id: id,
     dismiss,
@@ -183,6 +187,8 @@ function useToast() {
       }
     }
   }, [state])
+
+  console.log("useToast state:", state)
 
   return {
     ...state,

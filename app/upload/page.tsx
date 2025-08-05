@@ -31,6 +31,7 @@ import {
     Coins,
     Lock,
     Percent,
+    RefreshCw,
 } from "lucide-react"
 import MainLayout from "@/components/layouts/main-layout"
 import WaveformVisualizer from "@/components/upload/waveform-visualizer"
@@ -112,6 +113,9 @@ export default function UploadPage() {
     const [collections, setCollections] = useState<any[]>([])
     const [isLoadingCollections, setIsLoadingCollections] = useState(false)
 
+    // Connection refresh state
+    const [isRefreshingConnection, setIsRefreshingConnection] = useState(false)
+
     // Check if user is connected to wallet
     useEffect(() => {
         if (!isConnected) {
@@ -174,6 +178,7 @@ export default function UploadPage() {
 
         fetchStakingSettings()
     }, [walletAddress])
+
 
     // Handle file upload
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -490,6 +495,8 @@ export default function UploadPage() {
                             image: coverCid ? pinataService.getIPFSGatewayUrl(coverCid) : (coverImagePreview || "/audio-waveform-visualization.png")
                         }
 
+                        console.log("Complete metadata:", completeMetadata)
+
                         // Upload metadata to IPFS
                         const metadataCid = await pinataService.uploadMetadataToIPFS(completeMetadata)
                         metadataUrl = pinataService.getIPFSUri(metadataCid)
@@ -525,28 +532,30 @@ export default function UploadPage() {
                     setIsMinting(true)
                     try {
                         // Validate contract before minting
-                        toast({
-                            title: "Validating Contract",
-                            description: "Checking smart contract configuration...",
-                        })
+                        console.log("Validating contract...")
+                        // toast({
+                        //     title: "Validating Contract",
+                        //     description: "Checking smart contract configuration...",
+                        // })
 
                         const contractValidation = await contractService.validateContract()
                         if (!contractValidation.valid) {
                             throw new Error(`Contract validation failed: ${contractValidation.message}`)
                         }
 
-                        toast({
-                            title: "Contract Valid",
-                            description: "Smart contract is ready for minting. Retry logic is active for network issues.",
-                        })
+                        console.log("Contract validation successful")
+                        // toast({
+                        //     title: "Contract Valid",
+                        //     description: "Smart contract is ready for minting. Retry logic is active for network issues.",
+                        // })
 
                         // Mint NFT using smart contract with retry logic
                         toast({
-                            title: "Minting NFT",
+                            title: "Minting NFT ...",
                             description: "Minting your NFT with automatic retry for network issues...",
                         })
                         
-                        const mintResult = await mintNFT()
+                        const mintResult = await mintNFT(metadataUrl)
                         tokenId = mintResult.tokenId // tokenId is already a string from contract service
                         contractAddress = mintResult.contractAddress
                         console.log("NFT minted successfully:", tokenId, contractAddress)
@@ -570,10 +579,12 @@ export default function UploadPage() {
                             errorMessage = "Transaction was rejected by user. Please try again."
                         } else if (mintError.message.includes("gas")) {
                             errorMessage = "Transaction failed due to insufficient gas. Please try again with higher gas limit."
-                        } else if (mintError.message.includes("missing trie node") || mintError.message.includes("Internal JSON-RPC error") || mintError.message.includes("-32603")) {
-                            errorMessage = "Network connection issue. The system will automatically retry. Please wait..."
+                        } else if (mintError.message.includes("missing trie node") || mintError.message.includes("Internal JSON-RPC error") || mintError.message.includes("-32603") || mintError.message.includes("state is not available")) {
+                            errorMessage = "Network connection issue. Try using the 'Refresh Connection' button above, or refresh the page and try again."
                         } else if (mintError.message.includes("could not coalesce error")) {
                             errorMessage = "Blockchain network is temporarily unavailable. Please try again in a few moments."
+                        } else if (mintError.message.includes("RPC node is experiencing sync issues")) {
+                            errorMessage = "The blockchain network is experiencing sync issues. Try refreshing the page or switching networks and back."
                         }
                         
                         toast({
@@ -690,7 +701,7 @@ export default function UploadPage() {
     }
 
     // Mint NFT using smart contract
-    const mintNFT = async (): Promise<{ tokenId: string; contractAddress: string }> => {
+    const mintNFT = async (metadataUrl: string): Promise<{ tokenId: string; contractAddress: string }> => {
         try {
             // Debug: Check contract status first
             console.log("=== CONTRACT DEBUG INFO ===")
@@ -717,37 +728,7 @@ export default function UploadPage() {
 
             console.log("=== END DEBUG INFO ===")
 
-            // Create NFT metadata
-            const metadata = {
-                name: title,
-                description: description,
-                image: coverImagePreview || "/audio-waveform-visualization.png",
-                audio: filePreview,
-                attributes: [
-                    { trait_type: "Genre", value: genre },
-                    { trait_type: "Mood", value: mood },
-                    { trait_type: "Instrument", value: instrument },
-                    { trait_type: "Key Signature", value: keySignature },
-                    { trait_type: "Time Signature", value: timeSignature },
-                    { trait_type: "Duration", value: fileDuration ? formatTime(fileDuration) : "Unknown" },
-                    { trait_type: "Price", value: price || "0" },
-                    { trait_type: "Currency", value: currency },
-                    { trait_type: "Royalty Percentage", value: royaltyPercentage },
-                    { trait_type: "Staking Enabled", value: enableStaking },
-                    { trait_type: "Staking Royalty Share", value: customRoyaltyShare },
-                    { trait_type: "Minimum Stake Amount", value: minimumStakeAmount },
-                    { trait_type: "Lock Period Days", value: lockPeriodDays },
-                    { trait_type: "Use Profile Defaults", value: useProfileDefaults },
-                    { trait_type: "Unlock Source Files", value: unlockSourceFiles },
-                    { trait_type: "Unlock Remix Rights", value: unlockRemixRights },
-                    { trait_type: "Unlock Private Messages", value: unlockPrivateMessages },
-                    { trait_type: "Unlock Backstage Content", value: unlockBackstageContent }
-                ]
-            }
-
-            // For now, we'll use a mock tokenURI
-            // In production, you would upload this metadata to IPFS
-            const tokenURI = `ipfs://mock-cid-${Date.now()}`
+            const tokenURI = metadataUrl // Use the real IPFS metadata URL instead of mock
 
             // Calculate revenue split percentages based on staking settings
             const stakerRewardPercentage = enableStaking ? parseInt(customRoyaltyShare.toString()) : 0
@@ -1719,6 +1700,100 @@ export default function UploadPage() {
         )
     }
 
+    // Connection status component
+    const ConnectionStatus = () => {
+        const [connectionStatus, setConnectionStatus] = useState<{
+            connected: boolean;
+            network: string;
+            contractExists: boolean;
+            mintingEnabled: boolean;
+            mintPrice: string;
+            error?: string;
+        } | null>(null)
+        const [isLoading, setIsLoading] = useState(true)
+
+        useEffect(() => {
+            const checkConnection = async () => {
+                setIsLoading(true)
+                try {
+                    const status = await contractService.testContractConnection()
+                    setConnectionStatus(status)
+                } catch (error) {
+                    console.error("Failed to check connection status:", error)
+                } finally {
+                    setIsLoading(false)
+                }
+            }
+
+            checkConnection()
+        }, [])
+
+        if (isLoading) {
+            return (
+                <div className="flex items-center justify-center p-2 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    <span className="text-xs">Checking connection...</span>
+                </div>
+            )
+        }
+
+        if (!connectionStatus) {
+            return null
+        }
+
+        const { connected, network, contractExists, mintingEnabled, mintPrice, error } = connectionStatus
+
+        if (!connected) {
+            return (
+                <div className="flex items-center p-2 bg-red-500/10 border border-red-500/20 rounded-lg">
+                    <X className="w-4 h-4 text-red-400 mr-2" />
+                    <span className="text-xs text-red-400">Not connected to wallet</span>
+                </div>
+            )
+        }
+
+        if (!contractExists) {
+            return (
+                <div className="flex items-center p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                    <Info className="w-4 h-4 text-yellow-400 mr-2" />
+                    <span className="text-xs text-yellow-400">
+                        {error || "Contract connection issue"}
+                    </span>
+                </div>
+            )
+        }
+
+        return (
+            <div className="flex items-center p-2 bg-green-500/10 border border-green-500/20 rounded-lg">
+                <Check className="w-4 h-4 text-green-400 mr-2" />
+                <span className="text-xs text-green-400">
+                    Connected to {network} • Mint price: {ethers.formatEther(mintPrice)} MATIC
+                    {!mintingEnabled && " • Minting disabled"}
+                </span>
+            </div>
+        )
+    }
+
+    // Handle refresh connection
+    const handleRefreshConnection = async () => {
+        setIsRefreshingConnection(true)
+        try {
+            await contractService.refreshProvider()
+            toast({
+                title: "Connection Refreshed",
+                description: "Successfully refreshed blockchain connection. You can now try minting again.",
+            })
+        } catch (error: any) {
+            toast({
+                title: "Refresh Failed",
+                description: error.message || "Failed to refresh connection. Please try refreshing the page.",
+                variant: "destructive",
+            })
+        } finally {
+            setIsRefreshingConnection(false)
+        }
+    }
+
     // Render preview step
     const renderPreviewStep = () => {
         return (
@@ -1726,6 +1801,34 @@ export default function UploadPage() {
                 <div className="text-center">
                     <h2 className="text-3xl font-bold mb-2">Preview & Confirm</h2>
                     <p className="text-zinc-400">Review your riff before {uploadType === "mint-nft" ? "minting" : "uploading"}</p>
+                    
+                    {uploadType === "mint-nft" && (
+                        <div className="mt-4 space-y-2">
+                            <ConnectionStatus />
+                            <Button
+                                onClick={handleRefreshConnection}
+                                disabled={isRefreshingConnection}
+                                variant="outline"
+                                size="sm"
+                                className="text-xs"
+                            >
+                                {isRefreshingConnection ? (
+                                    <>
+                                        <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                                        Refreshing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <RefreshCw className="w-3 h-3 mr-2" />
+                                        Refresh Connection
+                                    </>
+                                )}
+                            </Button>
+                            <p className="text-xs text-zinc-500 mt-1">
+                                Use this if you encounter network issues during minting
+                            </p>
+                        </div>
+                    )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
