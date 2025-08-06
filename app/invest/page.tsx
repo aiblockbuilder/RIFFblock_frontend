@@ -106,7 +106,8 @@ export default function InvestPage() {
             return { valid: false, error: "Minimum stake amount is 100,000 RIFF." }
         }
         
-        const maxStake = riff.maxPool - riff.stakedAmount
+        // const maxStake = riff.maxPool - riff.stakedAmount
+        const maxStake = 10000000 // Default max for invest page
         if (amountNum > maxStake) {
             return { valid: false, error: `Maximum stake amount is ${maxStake.toLocaleString()} RIFF.` }
         }
