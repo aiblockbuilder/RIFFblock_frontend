@@ -400,6 +400,18 @@ export default function UploadPage() {
             }
         }
 
+        // Check wallet connection before proceeding to preview (especially for minting)
+        if (currentStep === STEPS.STAKING && uploadType === "mint-nft") {
+            if (!isConnected || !walletAddress) {
+                toast({
+                    title: "Wallet Connection Required",
+                    description: "Please connect your wallet before proceeding to mint your NFT.",
+                    variant: "destructive",
+                })
+                return
+            }
+        }
+
         // Move to next step
         if (currentStep < STEPS.PREVIEW) {
             setCurrentStep(currentStep + 1)
@@ -569,7 +581,13 @@ export default function UploadPage() {
                         
                         // Provide specific error messages based on the error type
                         let errorMessage = "Failed to mint NFT. Please try again."
-                        if (mintError.message.includes("Contract ABI mismatch")) {
+                        if (mintError.message.includes("Wallet is not connected")) {
+                            errorMessage = "Please connect your wallet before minting. Click the 'Connect Wallet' button above."
+                        } else if (mintError.message.includes("Wallet address mismatch")) {
+                            errorMessage = "Wallet address mismatch detected. Please disconnect and reconnect your wallet."
+                        } else if (mintError.message.includes("switch to Amoy testnet")) {
+                            errorMessage = "Please switch to Amoy testnet in your wallet before minting."
+                        } else if (mintError.message.includes("Contract ABI mismatch")) {
                             errorMessage = "Smart contract configuration error. Please contact support."
                         } else if (mintError.message.includes("No contract found")) {
                             errorMessage = "Smart contract not deployed. Please check network configuration."
@@ -577,6 +595,8 @@ export default function UploadPage() {
                             errorMessage = "Insufficient funds for gas fees. Please add more tokens to your wallet."
                         } else if (mintError.message.includes("user rejected")) {
                             errorMessage = "Transaction was rejected by user. Please try again."
+                        } else if (mintError.message.includes("The requested account and/or method has not been authorized")) {
+                            errorMessage = "MetaMask authorization failed. Please check that MetaMask is unlocked and approve the transaction when prompted."
                         } else if (mintError.message.includes("gas")) {
                             errorMessage = "Transaction failed due to insufficient gas. Please try again with higher gas limit."
                         } else if (mintError.message.includes("missing trie node") || mintError.message.includes("Internal JSON-RPC error") || mintError.message.includes("-32603") || mintError.message.includes("state is not available")) {
@@ -703,6 +723,38 @@ export default function UploadPage() {
     // Mint NFT using smart contract
     const mintNFT = async (metadataUrl: string): Promise<{ tokenId: string; contractAddress: string }> => {
         try {
+            // First, validate wallet connection
+            console.log("=== WALLET CONNECTION VALIDATION ===")
+            
+            // Check if wallet is connected
+            if (!isConnected || !walletAddress) {
+                throw new Error("Wallet is not connected. Please connect your wallet first.")
+            }
+            
+            // Verify the wallet address that will be used for minting
+            const currentAddress = await contractService.getCurrentAddress()
+            if (!currentAddress) {
+                throw new Error("Unable to get current wallet address. Please reconnect your wallet.")
+            }
+            
+            console.log("Wallet connection validation:")
+            console.log("- Is connected:", isConnected)
+            console.log("- Wallet address from context:", walletAddress)
+            console.log("- Current address from contract service:", currentAddress)
+            
+            // Check if addresses match
+            if (currentAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+                throw new Error(`Wallet address mismatch. Expected: ${walletAddress}, Got: ${currentAddress}. Please reconnect your wallet.`)
+            }
+            
+            // Check if we're on the correct network
+            const isOnCorrectNetwork = await contractService.isOnAmoyTestnet()
+            if (!isOnCorrectNetwork) {
+                throw new Error("Please switch to Amoy testnet in your wallet before minting.")
+            }
+            
+            console.log("=== END WALLET VALIDATION ===")
+
             // Debug: Check contract status first
             console.log("=== CONTRACT DEBUG INFO ===")
             try {
@@ -1794,6 +1846,74 @@ export default function UploadPage() {
         }
     }
 
+    // Test wallet connection and provide detailed status
+    const testWalletConnection = async () => {
+        try {
+            console.log("=== WALLET CONNECTION TEST ===")
+            
+            // Check if ethereum is available
+            if (typeof window === 'undefined' || !window.ethereum) {
+                console.error("No ethereum provider found")
+                toast({
+                    title: "MetaMask Not Found",
+                    description: "Please install MetaMask and refresh the page.",
+                    variant: "destructive",
+                })
+                return
+            }
+
+            // Check if wallet is connected
+            if (!isConnected || !walletAddress) {
+                console.error("Wallet not connected")
+                toast({
+                    title: "Wallet Not Connected",
+                    description: "Please connect your wallet first.",
+                    variant: "destructive",
+                })
+                return
+            }
+
+            // Get current address from contract service
+            const currentAddress = await contractService.getCurrentAddress()
+            console.log("Current address from contract service:", currentAddress)
+
+            // Check network
+            const network = await contractService.getCurrentNetwork()
+            console.log("Current network:", network)
+
+            // Test contract connection
+            const contractTest = await contractService.testContractConnection()
+            console.log("Contract connection test:", contractTest)
+
+            // Test RPC health
+            const rpcHealth = await contractService.testRpcHealth()
+            console.log("RPC health:", rpcHealth)
+
+            console.log("=== END WALLET CONNECTION TEST ===")
+
+            // Show results to user
+            if (contractTest.connected && contractTest.contractExists && rpcHealth.healthy) {
+                toast({
+                    title: "Wallet Connection Test Passed",
+                    description: `Connected to ${walletAddress} on ${network?.name || 'Unknown'} network. Contract is accessible.`,
+                })
+            } else {
+                toast({
+                    title: "Wallet Connection Issues Detected",
+                    description: "Please check your wallet connection and network settings.",
+                    variant: "destructive",
+                })
+            }
+        } catch (error: any) {
+            console.error("Wallet connection test failed:", error)
+            toast({
+                title: "Connection Test Failed",
+                description: error.message || "Failed to test wallet connection.",
+                variant: "destructive",
+            })
+        }
+    }
+
     // Render preview step
     const renderPreviewStep = () => {
         return (
@@ -1964,11 +2084,31 @@ export default function UploadPage() {
                             <h3 className="text-xl font-bold mb-4">Wallet Connection</h3>
 
                             {isConnected ? (
-                                <div className="flex items-center gap-3">
-                                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                                    <p className="text-zinc-300">
-                                        Your wallet is connected and ready for {uploadType === "mint-nft" ? "minting" : "uploading"}.
-                                    </p>
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                                        <p className="text-zinc-300">
+                                            Your wallet is connected and ready for {uploadType === "mint-nft" ? "minting" : "uploading"}.
+                                        </p>
+                                    </div>
+                                    
+                                    <div className="ml-6 space-y-2 text-sm">
+                                        <div className="flex justify-between">
+                                            <span className="text-zinc-400">Address:</span>
+                                            <span className="text-zinc-300 font-mono">{walletAddress}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-zinc-400">Network:</span>
+                                            <span className="text-zinc-300">Amoy Testnet</span>
+                                        </div>
+                                        {uploadType === "mint-nft" && (
+                                            <div className="flex justify-between">
+                                                <span className="text-zinc-400">Mint Cost:</span>
+                                                <span className="text-zinc-300">0.01 MATIC + gas fees</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    
                                 </div>
                             ) : (
                                 <div className="space-y-4">
