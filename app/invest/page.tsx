@@ -202,6 +202,10 @@ export default function InvestPage() {
             // Check if it's a contract error
             if (error.message.includes("contract") || error.message.includes("transaction") || error.message.includes("gas")) {
                 errorMessage = `Smart contract error: ${error.message}`
+            } else if (error.message.includes("ERC20: insufficient allowance")) {
+                errorMessage = "Token approval failed. Please try approving the tokens again or check your wallet settings."
+            } else if (error.message.includes("Token approval failed")) {
+                errorMessage = "Token approval failed. Please try approving the tokens again or check your wallet settings."
             } else if (error.message.includes("User already has a stake")) {
                 errorMessage = "You already have a stake on this riff. You can only stake once per riff."
             } else if (error.message.includes("Riff is not stakable")) {

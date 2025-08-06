@@ -618,14 +618,45 @@ export class ContractService {
             console.log("Amount to approve:", amount)
             console.log("Staking contract address:", CONTRACT_ADDRESSES.RIFF_STAKING)
             
-            const tx = await riffTokenContract.approve(CONTRACT_ADDRESSES.RIFF_STAKING, amount)
-            const receipt = await tx.wait()
+            // First check current allowance
+            const userAddress = await signer.getAddress()
+            const currentAllowance = await riffTokenContract.allowance(userAddress, CONTRACT_ADDRESSES.RIFF_STAKING)
+            console.log("Current allowance:", currentAllowance.toString())
             
+            // Only approve if current allowance is insufficient
+            if (currentAllowance >= BigInt(amount)) {
+                console.log("Sufficient allowance already exists")
+                return { hash: "already_approved" }
+            }
+            
+            const tx = await riffTokenContract.approve(CONTRACT_ADDRESSES.RIFF_STAKING, amount)
+            console.log("Approval transaction sent:", tx.hash)
+            
+            const receipt = await tx.wait()
             console.log("RIFF token approval successful:", receipt.hash)
+            
+            // Verify the approval was successful
+            const newAllowance = await riffTokenContract.allowance(userAddress, CONTRACT_ADDRESSES.RIFF_STAKING)
+            console.log("New allowance:", newAllowance.toString())
+            
+            if (newAllowance < BigInt(amount)) {
+                throw new Error("Approval transaction succeeded but allowance is still insufficient")
+            }
+            
             return receipt
         } catch (error: any) {
             console.error("Error approving RIFF tokens:", error)
-            throw new Error(error.message || "Failed to approve RIFF tokens")
+            
+            // Provide more specific error messages
+            if (error.message.includes("user rejected")) {
+                throw new Error("Token approval was rejected by user.")
+            } else if (error.message.includes("insufficient funds")) {
+                throw new Error("Insufficient funds for gas fees.")
+            } else if (error.message.includes("already_approved")) {
+                return { hash: "already_approved" }
+            } else {
+                throw new Error(error.message || "Failed to approve RIFF tokens")
+            }
         }
     }
 
@@ -697,8 +728,18 @@ export class ContractService {
             
             if (!hasApproval) {
                 console.log("Insufficient approval, requesting approval...")
-                await this.approveRiffTokens(amount)
-                console.log("Approval granted, proceeding with staking...")
+                const approvalReceipt = await this.approveRiffTokens(amount)
+                console.log("Approval transaction confirmed:", approvalReceipt.hash)
+                
+                // Wait a bit for the approval to be fully processed
+                await new Promise(resolve => setTimeout(resolve, 2000))
+                
+                // Double-check approval was successful
+                const approvalConfirmed = await this.checkRiffTokenApproval(amount)
+                if (!approvalConfirmed) {
+                    throw new Error("Token approval failed. Please try approving the tokens again.")
+                }
+                console.log("Approval confirmed, proceeding with staking...")
             } else {
                 console.log("Sufficient approval already exists")
             }
@@ -1341,6 +1382,65 @@ export class ContractService {
                 console.error("Failed to reinitialize provider:", reinitError)
                 throw new Error("Unable to find a working RPC endpoint. Please try refreshing the page.")
             }
+        }
+    }
+
+    /**
+     * Manually approve RIFF tokens with a specific amount (utility function)
+     * @param amount Amount of RIFF tokens to approve (in wei)
+     * @param spenderAddress Optional spender address (defaults to staking contract)
+     * @returns Promise with transaction receipt
+     */
+    async manualApproveRiffTokens(amount: string, spenderAddress?: string): Promise<any> {
+        try {
+            const signer = await this.getSigner()
+            if (!signer) {
+                throw new Error("No signer available. Please connect your wallet.")
+            }
+
+            const riffTokenContract = new ethers.Contract(CONTRACT_ADDRESSES.RIFF_TOKEN, ERC20_ABI, signer)
+            const spender = spenderAddress || CONTRACT_ADDRESSES.RIFF_STAKING
+            
+            console.log("Manually approving RIFF tokens...")
+            console.log("Amount to approve:", amount)
+            console.log("Spender address:", spender)
+            
+            const tx = await riffTokenContract.approve(spender, amount)
+            console.log("Manual approval transaction sent:", tx.hash)
+            
+            const receipt = await tx.wait()
+            console.log("Manual RIFF token approval successful:", receipt.hash)
+            
+            return receipt
+        } catch (error: any) {
+            console.error("Error in manual RIFF token approval:", error)
+            throw new Error(error.message || "Failed to manually approve RIFF tokens")
+        }
+    }
+
+    /**
+     * Get current RIFF token allowance for a specific spender
+     * @param spenderAddress The spender address to check allowance for
+     * @returns Promise with allowance amount in wei
+     */
+    async getRiffTokenAllowance(spenderAddress?: string): Promise<string> {
+        try {
+            const signer = await this.getSigner()
+            if (!signer) {
+                throw new Error("No signer available. Please connect your wallet.")
+            }
+
+            const userAddress = await signer.getAddress()
+            const riffTokenContract = new ethers.Contract(CONTRACT_ADDRESSES.RIFF_TOKEN, ERC20_ABI, signer)
+            const spender = spenderAddress || CONTRACT_ADDRESSES.RIFF_STAKING
+            
+            const allowance = await riffTokenContract.allowance(userAddress, spender)
+            console.log(`Current allowance for ${spender}:`, allowance.toString())
+            
+            return allowance.toString()
+        } catch (error: any) {
+            console.error("Error getting RIFF token allowance:", error)
+            throw new Error(error.message || "Failed to get token allowance")
         }
     }
 }

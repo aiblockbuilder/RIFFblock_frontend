@@ -51,6 +51,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog"
+import TokenApprovalDebugger from '@/components/token-approval-debugger'
 
 // Import mock data only for featured artists
 import { featuredArtists } from "@/data/market-data"
@@ -140,6 +141,7 @@ export default function MarketPage() {
     const [showStakingModal, setShowStakingModal] = useState(false)
     const [stakeAmount, setStakeAmount] = useState("500")
     const [isProcessing, setIsProcessing] = useState(false)
+    const [showApprovalDebugger, setShowApprovalDebugger] = useState(false)
 
     const audioRef = useRef<HTMLAudioElement>(null)
     const ambienceRef = useRef<HTMLAudioElement>(null)
@@ -688,13 +690,26 @@ export default function MarketPage() {
                     description: "Please approve the staking contract to spend your RIFF tokens. This requires a separate transaction.",
                 })
                 
-                // Request approval
-                await contractService.approveRiffTokens(amountInWei.toString())
-                
-                toast({
-                    title: "Token Approval Successful",
-                    description: "Your RIFF tokens have been approved for staking. Proceeding with staking transaction...",
-                })
+                // Request approval with better error handling
+                try {
+                    const approvalResult = await contractService.approveRiffTokens(amountInWei.toString())
+                    
+                    if (approvalResult.hash === "already_approved") {
+                        console.log("Approval already exists")
+                    } else {
+                        console.log("Approval transaction confirmed:", approvalResult.hash)
+                        toast({
+                            title: "Token Approval Successful",
+                            description: "Your RIFF tokens have been approved for staking. Proceeding with staking transaction...",
+                        })
+                        
+                        // Wait a bit for the approval to be fully processed
+                        await new Promise(resolve => setTimeout(resolve, 3000))
+                    }
+                } catch (approvalError: any) {
+                    console.error("Approval failed:", approvalError)
+                    throw new Error(`Token approval failed: ${approvalError.message}`)
+                }
             } else {
                 console.log("Sufficient approval already exists")
             }
@@ -732,8 +747,10 @@ export default function MarketPage() {
             
             if (error.message.includes("Insufficient RIFF token balance")) {
                 errorMessage = error.message
+            } else if (error.message.includes("ERC20: insufficient allowance")) {
+                errorMessage = "Token approval failed. Please try using the 'Debug Token Approval' button (top-right corner) to manually approve your tokens."
             } else if (error.message.includes("Token approval failed")) {
-                errorMessage = "Token approval failed. Please try approving the tokens again."
+                errorMessage = "Token approval failed. Please try using the 'Debug Token Approval' button (top-right corner) to manually approve your tokens."
             } else if (error.message.includes("Cannot stake on your own riff")) {
                 errorMessage = "You cannot stake on your own creations."
             } else if (error.message.includes("Amount is below minimum stake")) {
@@ -742,8 +759,6 @@ export default function MarketPage() {
                 errorMessage = "Insufficient RIFF tokens in your wallet for staking."
             } else if (error.message.includes("user rejected")) {
                 errorMessage = "Transaction was rejected by user."
-            } else if (error.message.includes("ERC20: insufficient allowance")) {
-                errorMessage = "Token approval failed. Please try approving the tokens again."
             } else if (error.message.includes("contract") || error.message.includes("transaction") || error.message.includes("gas")) {
                 errorMessage = `Smart contract error: ${error.message}`
             }
@@ -756,6 +771,11 @@ export default function MarketPage() {
         } finally {
             setIsProcessing(false)
         }
+    }
+
+    // Add this near the end of the component, before the return statement
+    const handleShowApprovalDebugger = () => {
+        setShowApprovalDebugger(true)
     }
 
     return (
@@ -1968,6 +1988,25 @@ export default function MarketPage() {
                         </motion.div>
                     )}
                 </AnimatePresence>
+
+                {/* Add the approval debugger modal */}
+                {showApprovalDebugger && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                        <div className="bg-white rounded-lg p-6 max-w-md w-full">
+                            <TokenApprovalDebugger onClose={() => setShowApprovalDebugger(false)} />
+                        </div>
+                    </div>
+                )}
+                
+                {/* Add a debug button in the header or somewhere accessible */}
+                <Button
+                    onClick={handleShowApprovalDebugger}
+                    variant="debug"
+                    size="sm"
+                    className="fixed top-4 right-4 z-40"
+                >
+                    Debug Token Approval
+                </Button>
 
             </div>
         </MainLayout>
