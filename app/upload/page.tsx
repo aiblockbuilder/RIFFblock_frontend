@@ -99,7 +99,7 @@ export default function UploadPage() {
     // Staking settings state
     const [customRoyaltyShare, setCustomRoyaltyShare] = useState(50)
     const [useProfileDefaults, setUseProfileDefaults] = useState(true)
-    const [minimumStakeAmount, setMinimumStakeAmount] = useState(100)
+    const [minimumStakeAmount, setMinimumStakeAmount] = useState(100000)
     const [lockPeriodDays, setLockPeriodDays] = useState(30)
     const [userStakingSettings, setUserStakingSettings] = useState<any>(null)
     const [isLoadingStakingSettings, setIsLoadingStakingSettings] = useState(false)
@@ -1685,9 +1685,9 @@ export default function UploadPage() {
                                             <Input
                                                 id="minimum-stake"
                                                 type="number"
-                                                min="1"
+                                                min="100000"
                                                 value={minimumStakeAmount}
-                                                onChange={(e) => setMinimumStakeAmount(parseInt(e.target.value) || 100)}
+                                                onChange={(e) => setMinimumStakeAmount(parseInt(e.target.value) || 100000)}
                                                 className="bg-zinc-900/50 border-zinc-800"
                                             />
                                             <p className="text-xs text-zinc-500">

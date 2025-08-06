@@ -139,7 +139,7 @@ export default function MarketPage() {
     
     // Stake modal state
     const [showStakingModal, setShowStakingModal] = useState(false)
-    const [stakeAmount, setStakeAmount] = useState("500")
+    const [stakeAmount, setStakeAmount] = useState("100000")
     const [isProcessing, setIsProcessing] = useState(false)
     const [showApprovalDebugger, setShowApprovalDebugger] = useState(false)
 
@@ -152,8 +152,13 @@ export default function MarketPage() {
     const filterSidebarRef = useRef<HTMLDivElement>(null)
     const { walletAddress, isConnected } = useWallet();
 
-    // Group featured artists by category
+    // Group featured artists by category, excluding "Curated Themes" and "Staff Picks"
     const artistsByCategory = featuredArtists.reduce<Record<string, Artist[]>>((acc, artist) => {
+        // Skip "Curated Themes" and "Staff Picks" categories
+        if (artist.category === "Curated Themes" || artist.category === "Staff Picks") {
+            return acc
+        }
+        
         if (!acc[artist.category]) {
             acc[artist.category] = []
         }
@@ -590,6 +595,26 @@ export default function MarketPage() {
         setStakeAmount(value)
     }
 
+    // Validate stake amount against min/max limits
+    const validateStakeAmount = (amount: string, riff: Riff | null) => {
+        const amountNum = Number.parseFloat(amount)
+        if (isNaN(amountNum) || amountNum <= 0) {
+            return { valid: false, error: "Please enter a valid stake amount." }
+        }
+        
+        if (amountNum < 100000) {
+            return { valid: false, error: "Minimum stake amount is 10,000 RIFF." }
+        }
+        
+        // For market page, we'll use a reasonable maximum since Riff interface doesn't have maxPool
+        const maxStake = 10000000 // Default max for market page
+        if (amountNum > maxStake) {
+            return { valid: false, error: `Maximum stake amount is ${maxStake.toLocaleString()} RIFF.` }
+        }
+        
+        return { valid: true, error: null }
+    }
+
     // Handle stake on riff
     const handleStakeOnRiff = async () => {
         if (!isConnected || !walletAddress) {
@@ -619,15 +644,18 @@ export default function MarketPage() {
             return;
         }
 
-        const stakeAmountNum = Number.parseFloat(stakeAmount)
-        if (isNaN(stakeAmountNum) || stakeAmountNum <= 0) {
+        // Validate stake amount
+        const validation = validateStakeAmount(stakeAmount, selectedRiff)
+        if (!validation.valid) {
             toast({
                 title: "Invalid Stake Amount",
-                description: "Please enter a valid stake amount.",
+                description: validation.error,
                 variant: "destructive",
             })
             return
         }
+        
+        const stakeAmountNum = Number.parseFloat(stakeAmount)
 
         // Convert amount to wei for validation
         const amountInWei = ethers.parseUnits(stakeAmountNum.toString(), 18)
@@ -1836,11 +1864,20 @@ export default function MarketPage() {
                                                                         type="text"
                                                                         value={stakeAmount}
                                                                         onChange={handleStakeAmountChange}
-                                                                        className="bg-stone-800 border-orange-800/30 text-orange-100"
+                                                                        className={`bg-stone-800 border-orange-800/30 text-orange-100 ${
+                                                                            stakeAmount && !validateStakeAmount(stakeAmount, selectedRiff).valid 
+                                                                                ? 'border-red-500' 
+                                                                                : ''
+                                                                        }`}
                                                                     />
                                                                     <p className="text-xs text-orange-200/50">
-                                                                        Minimum stake: 100,000 RIFF • Maximum stake: No limit
+0                                                                        Minimum stake: 100,000 RIFF • Maximum stake: No limit
                                                                     </p>
+                                                                    {stakeAmount && !validateStakeAmount(stakeAmount, selectedRiff).valid && (
+                                                                        <p className="text-xs text-red-500">
+                                                                            {validateStakeAmount(stakeAmount, selectedRiff).error}
+                                                                        </p>
+                                                                    )}
                                                                 </div>
 
                                                                 <div className="bg-stone-800/50 p-4 rounded-lg space-y-3 border border-orange-800/20">
@@ -1988,26 +2025,6 @@ export default function MarketPage() {
                         </motion.div>
                     )}
                 </AnimatePresence>
-
-                {/* Add the approval debugger modal */}
-                {showApprovalDebugger && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                        <div className="bg-white rounded-lg p-6 max-w-md w-full">
-                            <TokenApprovalDebugger onClose={() => setShowApprovalDebugger(false)} />
-                        </div>
-                    </div>
-                )}
-                
-                {/* Add a debug button in the header or somewhere accessible */}
-                <Button
-                    onClick={handleShowApprovalDebugger}
-                    variant="debug"
-                    size="sm"
-                    className="fixed top-4 right-4 z-40"
-                >
-                    Debug Token Approval
-                </Button>
-
             </div>
         </MainLayout>
     )
