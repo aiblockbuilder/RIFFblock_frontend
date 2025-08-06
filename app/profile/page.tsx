@@ -422,7 +422,7 @@ export default function ProfilePage() {
                                                 },
                                                 {
                                                     title: "Total Tips Given",
-                                                    value: "850", // TODO: Get from backend
+                                                    value: "0", // TODO: Get from backend
                                                     unit: "RIFF",
                                                     icon: Gift,
                                                     color: "blue",

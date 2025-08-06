@@ -64,7 +64,7 @@ export default function InvestPage() {
     const [isProcessing, setIsProcessing] = useState(false)
     const [showStakingModal, setShowStakingModal] = useState(false)
     const [selectedRiff, setSelectedRiff] = useState<any>(null)
-    const [stakeAmount, setStakeAmount] = useState("500")
+    const [stakeAmount, setStakeAmount] = useState("100000")
     const [showTipModal, setShowTipModal] = useState(false)
     const [selectedTier, setSelectedTier] = useState<any>(null)
     const [tipAmount, setTipAmount] = useState("100")
@@ -93,6 +93,25 @@ export default function InvestPage() {
     const handleStakeAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value.replace(/[^0-9.]/g, "")
         setStakeAmount(value)
+    }
+
+    // Validate stake amount against min/max limits
+    const validateStakeAmount = (amount: string, riff: any) => {
+        const amountNum = Number.parseFloat(amount)
+        if (isNaN(amountNum) || amountNum <= 0) {
+            return { valid: false, error: "Please enter a valid stake amount." }
+        }
+        
+        if (amountNum < 100000) {
+            return { valid: false, error: "Minimum stake amount is 100,000 RIFF." }
+        }
+        
+        const maxStake = riff.maxPool - riff.stakedAmount
+        if (amountNum > maxStake) {
+            return { valid: false, error: `Maximum stake amount is ${maxStake.toLocaleString()} RIFF.` }
+        }
+        
+        return { valid: true, error: null }
     }
 
     // Handle tip amount change
@@ -144,15 +163,18 @@ export default function InvestPage() {
             return
         }
 
-        const stakeAmountNum = Number.parseFloat(stakeAmount)
-        if (isNaN(stakeAmountNum) || stakeAmountNum <= 0) {
+        // Validate stake amount
+        const validation = validateStakeAmount(stakeAmount, selectedRiff)
+        if (!validation.valid) {
             toast({
                 title: "Invalid Stake Amount",
-                description: "Please enter a valid stake amount.",
+                description: validation.error,
                 variant: "destructive",
             })
             return
         }
+        
+        const stakeAmountNum = Number.parseFloat(stakeAmount)
 
         // Extract the riff ID from the selectedRiff.id (format: "riff-{id}")
         const riffId = Number.parseInt(selectedRiff.id.replace("riff-", ""))
@@ -202,6 +224,10 @@ export default function InvestPage() {
             // Check if it's a contract error
             if (error.message.includes("contract") || error.message.includes("transaction") || error.message.includes("gas")) {
                 errorMessage = `Smart contract error: ${error.message}`
+            } else if (error.message.includes("ERC20: insufficient allowance")) {
+                errorMessage = "Token approval failed. Please try approving the tokens again or check your wallet settings."
+            } else if (error.message.includes("Token approval failed")) {
+                errorMessage = "Token approval failed. Please try approving the tokens again or check your wallet settings."
             } else if (error.message.includes("User already has a stake")) {
                 errorMessage = "You already have a stake on this riff. You can only stake once per riff."
             } else if (error.message.includes("Riff is not stakable")) {
@@ -930,12 +956,21 @@ export default function InvestPage() {
                                                                     type="text"
                                                                     value={stakeAmount}
                                                                     onChange={handleStakeAmountChange}
-                                                                    className="bg-zinc-800 border-zinc-700"
+                                                                    className={`bg-zinc-800 border-zinc-700 ${
+                                                                        stakeAmount && !validateStakeAmount(stakeAmount, riff).valid 
+                                                                            ? 'border-red-500' 
+                                                                            : ''
+                                                                    }`}
                                                                 />
                                                                 <p className="text-xs text-zinc-500">
-                                                                    Minimum stake: 100 RIFF • Maximum stake:{" "}
+                                                                    Minimum stake: 100,000 RIFF • Maximum stake:{" "}
                                                                     {riff.maxPool - riff.stakedAmount} RIFF
                                                                 </p>
+                                                                {stakeAmount && !validateStakeAmount(stakeAmount, riff).valid && (
+                                                                    <p className="text-xs text-red-500">
+                                                                        {validateStakeAmount(stakeAmount, riff).error}
+                                                                    </p>
+                                                                )}
                                                             </div>
 
                                                             <div className="bg-zinc-800/50 p-4 rounded-lg space-y-3">

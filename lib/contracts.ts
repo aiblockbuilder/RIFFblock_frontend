@@ -12,6 +12,18 @@ import { ethers } from 'ethers'
 import RIFF_NFT_ABI from './RIFF_NFT_ABI.json'
 import RIFF_STAKING_ABI from './RIFF_STAKING_ABI.json'
 
+// ERC20 ABI for token approvals
+const ERC20_ABI = [
+    "function approve(address spender, uint256 amount) external returns (bool)",
+    "function allowance(address owner, address spender) external view returns (uint256)",
+    "function balanceOf(address account) external view returns (uint256)",
+    "function transfer(address to, uint256 amount) external returns (bool)",
+    "function transferFrom(address from, address to, uint256 amount) external returns (bool)",
+    "function name() external view returns (string)",
+    "function symbol() external view returns (string)",
+    "function decimals() external view returns (uint8)"
+]
+
 // Network configuration for Amoy testnet
 const AMOY_TESTNET = {
     chainId: "0x13882", // 80002 in hex (Amoy testnet)
@@ -25,7 +37,8 @@ const AMOY_TESTNET = {
         "https://rpc.ankr.com/polygon_amoy/e66a6d9da101e8bd10b871515a03caa7704dbf170fe10daffb691ff78d15843a",
         "https://polygon-amoy-bor.publicnode.com",
         "https://polygon-amoy.drpc.org",
-        "https://polygon-amoy.public.blastapi.io"
+        "https://polygon-amoy.public.blastapi.io",
+        "https://polygon-amoy.publicnode.com"
     ],
     blockExplorerUrls: ["https://www.oklink.com/amoy"],
 }
@@ -266,7 +279,8 @@ export class ContractService {
             "econnreset",
             "enetunreach",
             "could not coalesce error",
-            "state is not available"
+            "state is not available",
+            "missing revert data"
         ]
         
         return retryablePatterns.some(pattern => 
@@ -559,7 +573,140 @@ export class ContractService {
     }
 
     /**
-     * Stake RIFF tokens on an NFT
+     * Check if the staking contract has approval to spend RIFF tokens
+     * @param amount Amount of RIFF tokens to check approval for (in wei)
+     * @returns Promise with boolean indicating if approval is sufficient
+     */
+    async checkRiffTokenApproval(amount: string): Promise<boolean> {
+        try {
+            const signer = await this.getSigner()
+            if (!signer) {
+                throw new Error("No signer available. Please connect your wallet.")
+            }
+
+            const userAddress = await signer.getAddress()
+            const riffTokenContract = new ethers.Contract(CONTRACT_ADDRESSES.RIFF_TOKEN, ERC20_ABI, signer)
+            
+            const allowance = await riffTokenContract.allowance(userAddress, CONTRACT_ADDRESSES.RIFF_STAKING)
+            const requiredAmount = BigInt(amount)
+            
+            console.log("Current allowance:", allowance.toString())
+            console.log("Required amount:", requiredAmount.toString())
+            
+            return allowance >= requiredAmount
+        } catch (error: any) {
+            console.error("Error checking RIFF token approval:", error)
+            throw new Error(error.message || "Failed to check token approval")
+        }
+    }
+
+    /**
+     * Approve the staking contract to spend RIFF tokens
+     * @param amount Amount of RIFF tokens to approve (in wei)
+     * @returns Promise with transaction receipt
+     */
+    async approveRiffTokens(amount: string): Promise<any> {
+        try {
+            const signer = await this.getSigner()
+            if (!signer) {
+                throw new Error("No signer available. Please connect your wallet.")
+            }
+
+            const riffTokenContract = new ethers.Contract(CONTRACT_ADDRESSES.RIFF_TOKEN, ERC20_ABI, signer)
+            
+            console.log("Approving RIFF tokens for staking contract...")
+            console.log("Amount to approve:", amount)
+            console.log("Staking contract address:", CONTRACT_ADDRESSES.RIFF_STAKING)
+            
+            // First check current allowance
+            const userAddress = await signer.getAddress()
+            const currentAllowance = await riffTokenContract.allowance(userAddress, CONTRACT_ADDRESSES.RIFF_STAKING)
+            console.log("Current allowance:", currentAllowance.toString())
+            
+            // Only approve if current allowance is insufficient
+            if (currentAllowance >= BigInt(amount)) {
+                console.log("Sufficient allowance already exists")
+                return { hash: "already_approved" }
+            }
+            
+            const tx = await riffTokenContract.approve(CONTRACT_ADDRESSES.RIFF_STAKING, amount)
+            console.log("Approval transaction sent:", tx.hash)
+            
+            const receipt = await tx.wait()
+            console.log("RIFF token approval successful:", receipt.hash)
+            
+            // Verify the approval was successful
+            const newAllowance = await riffTokenContract.allowance(userAddress, CONTRACT_ADDRESSES.RIFF_STAKING)
+            console.log("New allowance:", newAllowance.toString())
+            
+            if (newAllowance < BigInt(amount)) {
+                throw new Error("Approval transaction succeeded but allowance is still insufficient")
+            }
+            
+            return receipt
+        } catch (error: any) {
+            console.error("Error approving RIFF tokens:", error)
+            
+            // Provide more specific error messages
+            if (error.message.includes("user rejected")) {
+                throw new Error("Token approval was rejected by user.")
+            } else if (error.message.includes("insufficient funds")) {
+                throw new Error("Insufficient funds for gas fees.")
+            } else if (error.message.includes("already_approved")) {
+                return { hash: "already_approved" }
+            } else {
+                throw new Error(error.message || "Failed to approve RIFF tokens")
+            }
+        }
+    }
+
+    /**
+     * Get RIFF token balance for the current user
+     * @returns Promise with token balance in wei
+     */
+    async getRiffTokenBalance(): Promise<string> {
+        const maxRetries = 3
+        let lastError: any = null
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                const signer = await this.getSigner()
+                if (!signer) {
+                    throw new Error("No signer available. Please connect your wallet.")
+                }
+
+                const userAddress = await signer.getAddress()
+                const riffTokenContract = new ethers.Contract(CONTRACT_ADDRESSES.RIFF_TOKEN, ERC20_ABI, signer)
+                
+                console.log(`Attempt ${attempt}: Getting RIFF token balance for address ${userAddress}`)
+                const balance = await riffTokenContract.balanceOf(userAddress)
+                console.log("RIFF token balance:", balance.toString())
+                
+                return balance.toString()
+            } catch (error: any) {
+                lastError = error
+                console.error(`Error getting RIFF token balance (attempt ${attempt}):`, error)
+                
+                // Check if this is a retryable error
+                if (this.isRetryableError(error) && attempt < maxRetries) {
+                    console.log(`Retrying in ${attempt * 1000}ms...`)
+                    await new Promise(resolve => setTimeout(resolve, attempt * 1000))
+                    continue
+                }
+                
+                // If it's the last attempt or not retryable, throw the error
+                if (attempt === maxRetries) {
+                    console.error("All attempts to get RIFF token balance failed")
+                    throw new Error(`Failed to get token balance after ${maxRetries} attempts: ${error.message}`)
+                }
+            }
+        }
+        
+        throw new Error(lastError?.message || "Failed to get token balance")
+    }
+
+    /**
+     * Stake RIFF tokens on an NFT with automatic approval handling
      * @param tokenId The NFT token ID
      * @param amount Amount of RIFF tokens to stake (in wei)
      */
@@ -570,15 +717,61 @@ export class ContractService {
                 throw new Error("No signer available. Please connect your wallet.")
             }
 
+            // Check if user has sufficient RIFF token balance
+            const balance = await this.getRiffTokenBalance()
+            if (BigInt(balance) < BigInt(amount)) {
+                throw new Error(`Insufficient RIFF token balance. Required: ${ethers.formatUnits(amount, 18)} RIFF, Available: ${ethers.formatUnits(balance, 18)} RIFF`)
+            }
+
+            // Check if staking contract has sufficient approval
+            const hasApproval = await this.checkRiffTokenApproval(amount)
+            
+            if (!hasApproval) {
+                console.log("Insufficient approval, requesting approval...")
+                const approvalReceipt = await this.approveRiffTokens(amount)
+                console.log("Approval transaction confirmed:", approvalReceipt.hash)
+                
+                // Wait a bit for the approval to be fully processed
+                await new Promise(resolve => setTimeout(resolve, 2000))
+                
+                // Double-check approval was successful
+                const approvalConfirmed = await this.checkRiffTokenApproval(amount)
+                if (!approvalConfirmed) {
+                    throw new Error("Token approval failed. Please try approving the tokens again.")
+                }
+                console.log("Approval confirmed, proceeding with staking...")
+            } else {
+                console.log("Sufficient approval already exists")
+            }
+
             const contract = new ethers.Contract(CONTRACT_ADDRESSES.RIFF_STAKING, RIFF_STAKING_ABI, signer)
+            
+            console.log("Calling stakeOnRiff function...")
+            console.log("Token ID:", tokenId)
+            console.log("Amount:", amount)
             
             const tx = await contract.stakeOnRiff(tokenId, amount)
             const receipt = await tx.wait()
             
+            console.log("Staking transaction successful:", receipt.hash)
             return receipt
         } catch (error: any) {
             console.error("Error staking on riff:", error)
-            throw new Error(error.message || "Failed to stake on riff")
+            
+            // Provide more specific error messages
+            if (error.message.includes("ERC20: insufficient allowance")) {
+                throw new Error("Token approval failed. Please try approving the tokens again.")
+            } else if (error.message.includes("insufficient funds")) {
+                throw new Error("Insufficient RIFF tokens in your wallet for staking.")
+            } else if (error.message.includes("user rejected")) {
+                throw new Error("Transaction was rejected by user.")
+            } else if (error.message.includes("Cannot stake on your own riff")) {
+                throw new Error("You cannot stake on your own creations.")
+            } else if (error.message.includes("Amount is below minimum stake")) {
+                throw new Error("Stake amount is below the minimum required amount.")
+            } else {
+                throw new Error(error.message || "Failed to stake on riff")
+            }
         }
     }
 
@@ -733,18 +926,117 @@ export class ContractService {
      * @returns Promise with minimum stake amount in wei
      */
     async getMinimumStakeAmount(): Promise<string> {
-        try {
-            const signer = await this.getSigner()
-            if (!signer) {
-                throw new Error("No signer available. Please connect your wallet.")
-            }
+        const maxRetries = 3
+        let lastError: any = null
 
-            const contract = new ethers.Contract(CONTRACT_ADDRESSES.RIFF_STAKING, RIFF_STAKING_ABI, signer)
-            const minStakeAmount = await contract.MIN_STAKE_AMOUNT()
-            return minStakeAmount.toString()
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                const signer = await this.getSigner()
+                if (!signer) {
+                    throw new Error("No signer available. Please connect your wallet.")
+                }
+
+                const contract = new ethers.Contract(CONTRACT_ADDRESSES.RIFF_STAKING, RIFF_STAKING_ABI, signer)
+                
+                console.log(`Attempt ${attempt}: Getting minimum stake amount from contract`)
+                const minStakeAmount = await contract.MIN_STAKE_AMOUNT()
+                console.log("Minimum stake amount:", minStakeAmount.toString())
+                return minStakeAmount.toString()
+            } catch (error: any) {
+                lastError = error
+                console.error(`Error getting minimum stake amount (attempt ${attempt}):`, error)
+                
+                // Check if this is a retryable error
+                if (this.isRetryableError(error) && attempt < maxRetries) {
+                    console.log(`Retrying in ${attempt * 1000}ms...`)
+                    await new Promise(resolve => setTimeout(resolve, attempt * 1000))
+                    continue
+                }
+                
+                // If it's the last attempt or not retryable, use hardcoded fallback
+                if (attempt === maxRetries) {
+                    console.error("All attempts to get minimum stake amount failed, using hardcoded value")
+                    const hardcodedMinStake = "100000000000000000000000" // 100,000 * 10^18
+                    console.log("Using hardcoded minimum stake amount:", hardcodedMinStake)
+                    return hardcodedMinStake
+                }
+            }
+        }
+        
+        // Fallback to hardcoded value
+        const hardcodedMinStake = "100000000000000000000000" // 100,000 * 10^18
+        console.log("Using hardcoded minimum stake amount:", hardcodedMinStake)
+        return hardcodedMinStake
+    }
+
+    /**
+     * Get the minimum stake amount in human-readable format
+     * @returns Promise with minimum stake amount in RIFF tokens
+     */
+    async getMinimumStakeAmountFormatted(): Promise<string> {
+        try {
+            const minStakeAmountWei = await this.getMinimumStakeAmount()
+            const minStakeAmountTokens = ethers.formatUnits(minStakeAmountWei, 18)
+            return minStakeAmountTokens
         } catch (error: any) {
-            console.error("Error getting minimum stake amount:", error)
+            console.error("Error getting formatted minimum stake amount:", error)
             throw new Error(error.message || "Failed to get minimum stake amount")
+        }
+    }
+
+    /**
+     * Validate if a stake amount meets the minimum requirement
+     * @param amount Amount to validate (in wei)
+     * @returns Promise with validation result
+     */
+    async validateStakeAmount(amount: string): Promise<{ valid: boolean; minAmount: string; formattedMinAmount: string; error?: string }> {
+        try {
+            const minStakeAmount = await this.getMinimumStakeAmount()
+            const formattedMinAmount = await this.getMinimumStakeAmountFormatted()
+            
+            const amountBigInt = BigInt(amount)
+            const minAmountBigInt = BigInt(minStakeAmount)
+            
+            if (amountBigInt < minAmountBigInt) {
+                return {
+                    valid: false,
+                    minAmount: minStakeAmount,
+                    formattedMinAmount,
+                    error: `Stake amount must be at least ${formattedMinAmount} RIFF tokens`
+                }
+            }
+            
+            return {
+                valid: true,
+                minAmount: minStakeAmount,
+                formattedMinAmount,
+                error: undefined
+            }
+        } catch (error: any) {
+            console.error("Error validating stake amount:", error)
+            
+            // If we can't get the minimum stake amount from the contract, use the hardcoded value
+            const hardcodedMinStake = "100000000000000000000000" // 100,000 * 10^18
+            const hardcodedFormatted = "100000" // 100,000 RIFF
+            
+            const amountBigInt = BigInt(amount)
+            const minAmountBigInt = BigInt(hardcodedMinStake)
+            
+            if (amountBigInt < minAmountBigInt) {
+                return {
+                    valid: false,
+                    minAmount: hardcodedMinStake,
+                    formattedMinAmount: hardcodedFormatted,
+                    error: `Stake amount must be at least ${hardcodedFormatted} RIFF tokens`
+                }
+            }
+            
+            return {
+                valid: true,
+                minAmount: hardcodedMinStake,
+                formattedMinAmount: hardcodedFormatted,
+                error: undefined
+            }
         }
     }
 
@@ -1090,6 +1382,65 @@ export class ContractService {
                 console.error("Failed to reinitialize provider:", reinitError)
                 throw new Error("Unable to find a working RPC endpoint. Please try refreshing the page.")
             }
+        }
+    }
+
+    /**
+     * Manually approve RIFF tokens with a specific amount (utility function)
+     * @param amount Amount of RIFF tokens to approve (in wei)
+     * @param spenderAddress Optional spender address (defaults to staking contract)
+     * @returns Promise with transaction receipt
+     */
+    async manualApproveRiffTokens(amount: string, spenderAddress?: string): Promise<any> {
+        try {
+            const signer = await this.getSigner()
+            if (!signer) {
+                throw new Error("No signer available. Please connect your wallet.")
+            }
+
+            const riffTokenContract = new ethers.Contract(CONTRACT_ADDRESSES.RIFF_TOKEN, ERC20_ABI, signer)
+            const spender = spenderAddress || CONTRACT_ADDRESSES.RIFF_STAKING
+            
+            console.log("Manually approving RIFF tokens...")
+            console.log("Amount to approve:", amount)
+            console.log("Spender address:", spender)
+            
+            const tx = await riffTokenContract.approve(spender, amount)
+            console.log("Manual approval transaction sent:", tx.hash)
+            
+            const receipt = await tx.wait()
+            console.log("Manual RIFF token approval successful:", receipt.hash)
+            
+            return receipt
+        } catch (error: any) {
+            console.error("Error in manual RIFF token approval:", error)
+            throw new Error(error.message || "Failed to manually approve RIFF tokens")
+        }
+    }
+
+    /**
+     * Get current RIFF token allowance for a specific spender
+     * @param spenderAddress The spender address to check allowance for
+     * @returns Promise with allowance amount in wei
+     */
+    async getRiffTokenAllowance(spenderAddress?: string): Promise<string> {
+        try {
+            const signer = await this.getSigner()
+            if (!signer) {
+                throw new Error("No signer available. Please connect your wallet.")
+            }
+
+            const userAddress = await signer.getAddress()
+            const riffTokenContract = new ethers.Contract(CONTRACT_ADDRESSES.RIFF_TOKEN, ERC20_ABI, signer)
+            const spender = spenderAddress || CONTRACT_ADDRESSES.RIFF_STAKING
+            
+            const allowance = await riffTokenContract.allowance(userAddress, spender)
+            console.log(`Current allowance for ${spender}:`, allowance.toString())
+            
+            return allowance.toString()
+        } catch (error: any) {
+            console.error("Error getting RIFF token allowance:", error)
+            throw new Error(error.message || "Failed to get token allowance")
         }
     }
 }

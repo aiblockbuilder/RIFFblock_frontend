@@ -51,6 +51,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog"
+import TokenApprovalDebugger from '@/components/token-approval-debugger'
 
 // Import mock data only for featured artists
 import { featuredArtists } from "@/data/market-data"
@@ -138,8 +139,9 @@ export default function MarketPage() {
     
     // Stake modal state
     const [showStakingModal, setShowStakingModal] = useState(false)
-    const [stakeAmount, setStakeAmount] = useState("500")
+    const [stakeAmount, setStakeAmount] = useState("100000")
     const [isProcessing, setIsProcessing] = useState(false)
+    const [showApprovalDebugger, setShowApprovalDebugger] = useState(false)
 
     const audioRef = useRef<HTMLAudioElement>(null)
     const ambienceRef = useRef<HTMLAudioElement>(null)
@@ -150,8 +152,13 @@ export default function MarketPage() {
     const filterSidebarRef = useRef<HTMLDivElement>(null)
     const { walletAddress, isConnected } = useWallet();
 
-    // Group featured artists by category
+    // Group featured artists by category, excluding "Curated Themes" and "Staff Picks"
     const artistsByCategory = featuredArtists.reduce<Record<string, Artist[]>>((acc, artist) => {
+        // Skip "Curated Themes" and "Staff Picks" categories
+        if (artist.category === "Curated Themes" || artist.category === "Staff Picks") {
+            return acc
+        }
+        
         if (!acc[artist.category]) {
             acc[artist.category] = []
         }
@@ -588,6 +595,26 @@ export default function MarketPage() {
         setStakeAmount(value)
     }
 
+    // Validate stake amount against min/max limits
+    const validateStakeAmount = (amount: string, riff: Riff | null) => {
+        const amountNum = Number.parseFloat(amount)
+        if (isNaN(amountNum) || amountNum <= 0) {
+            return { valid: false, error: "Please enter a valid stake amount." }
+        }
+        
+        if (amountNum < 100000) {
+            return { valid: false, error: "Minimum stake amount is 10,000 RIFF." }
+        }
+        
+        // For market page, we'll use a reasonable maximum since Riff interface doesn't have maxPool
+        const maxStake = 10000000 // Default max for market page
+        if (amountNum > maxStake) {
+            return { valid: false, error: `Maximum stake amount is ${maxStake.toLocaleString()} RIFF.` }
+        }
+        
+        return { valid: true, error: null }
+    }
+
     // Handle stake on riff
     const handleStakeOnRiff = async () => {
         if (!isConnected || !walletAddress) {
@@ -617,11 +644,40 @@ export default function MarketPage() {
             return;
         }
 
-        const stakeAmountNum = Number.parseFloat(stakeAmount)
-        if (isNaN(stakeAmountNum) || stakeAmountNum <= 0) {
+        // Validate stake amount
+        const validation = validateStakeAmount(stakeAmount, selectedRiff)
+        if (!validation.valid) {
             toast({
                 title: "Invalid Stake Amount",
-                description: "Please enter a valid stake amount.",
+                description: validation.error,
+                variant: "destructive",
+            })
+            return
+        }
+        
+        const stakeAmountNum = Number.parseFloat(stakeAmount)
+
+        // Convert amount to wei for validation
+        const amountInWei = ethers.parseUnits(stakeAmountNum.toString(), 18)
+        
+        // Validate minimum stake amount
+        try {
+            const { contractService } = await import('@/lib/contracts')
+            const validation = await contractService.validateStakeAmount(amountInWei.toString())
+            
+            if (!validation.valid) {
+                toast({
+                    title: "Invalid Stake Amount",
+                    description: validation.error,
+                    variant: "destructive",
+                })
+                return
+            }
+        } catch (error: any) {
+            console.error("Error validating stake amount:", error)
+            toast({
+                title: "Validation Error",
+                description: "Failed to validate stake amount. Please try again.",
                 variant: "destructive",
             })
             return
@@ -630,54 +686,109 @@ export default function MarketPage() {
         setIsProcessing(true)
 
         try {
-            // Step 1: Interact with smart contract first
-            console.log("Step 1: Calling smart contract stakeOnRiff function...")
-            
             // Import contract service
             const { contractService } = await import('@/lib/contracts')
             
             // Convert amount to wei (assuming RIFF has 18 decimals like most ERC20 tokens)
             const amountInWei = ethers.parseUnits(stakeAmountNum.toString(), 18)
             
-            // Call the smart contract stakeOnRiff function
+            // Step 1: Check token balance and approval
+            console.log("Step 1: Checking token balance and approval...")
+            toast({
+                title: "Checking Token Balance",
+                description: "Verifying your RIFF token balance and approval status...",
+            })
+            
+            // Check if user has sufficient balance
+            const balance = await contractService.getRiffTokenBalance()
+            const balanceInTokens = ethers.formatUnits(balance, 18)
+            console.log("User RIFF token balance:", balanceInTokens)
+            
+            if (BigInt(balance) < BigInt(amountInWei.toString())) {
+                throw new Error(`Insufficient RIFF token balance. Required: ${stakeAmount} RIFF, Available: ${balanceInTokens} RIFF`)
+            }
+            
+            // Check if approval is needed
+            const hasApproval = await contractService.checkRiffTokenApproval(amountInWei.toString())
+            
+            if (!hasApproval) {
+                console.log("Approval needed, requesting token approval...")
+                toast({
+                    title: "Token Approval Required",
+                    description: "Please approve the staking contract to spend your RIFF tokens. This requires a separate transaction.",
+                })
+                
+                // Request approval with better error handling
+                try {
+                    const approvalResult = await contractService.approveRiffTokens(amountInWei.toString())
+                    
+                    if (approvalResult.hash === "already_approved") {
+                        console.log("Approval already exists")
+                    } else {
+                        console.log("Approval transaction confirmed:", approvalResult.hash)
+                        toast({
+                            title: "Token Approval Successful",
+                            description: "Your RIFF tokens have been approved for staking. Proceeding with staking transaction...",
+                        })
+                        
+                        // Wait a bit for the approval to be fully processed
+                        await new Promise(resolve => setTimeout(resolve, 3000))
+                    }
+                } catch (approvalError: any) {
+                    console.error("Approval failed:", approvalError)
+                    throw new Error(`Token approval failed: ${approvalError.message}`)
+                }
+            } else {
+                console.log("Sufficient approval already exists")
+            }
+            
+            // Step 2: Execute staking transaction
+            console.log("Step 2: Executing staking transaction...")
+            toast({
+                title: "Staking in Progress",
+                description: "Processing your staking transaction on the blockchain...",
+            })
+            
             const contractResult = await contractService.stakeOnRiff(selectedRiff.id.toString(), amountInWei.toString())
             
             console.log("Smart contract transaction successful:", contractResult)
             
-            // Step 2: If contract interaction succeeds, call backend API
-            console.log("Step 2: Calling backend API to update database...")
+            // Step 3: Update backend database
+            console.log("Step 3: Updating backend database...")
+            toast({
+                title: "Updating Database",
+                description: "Recording your stake in the database...",
+            })
+            
             await stakeApi.stakeOnNft(selectedRiff.id, walletAddress, stakeAmountNum)
             
             setShowStakingModal(false)
             toast({
-                title: "Staking Successful",
+                title: "Staking Successful! 🎉",
                 description: `You have successfully staked ${stakeAmount} RIFF on "${selectedRiff.title}". Transaction hash: ${contractResult.hash}`,
             })
         } catch (error: any) {
             console.error("Error staking on riff:", error)
             
-            // Handle specific error cases
+            // Handle specific error cases with more detailed messages
             let errorMessage = "Failed to stake on this riff. Please try again."
             
-            // Check if it's a contract error
-            if (error.message.includes("contract") || error.message.includes("transaction") || error.message.includes("gas")) {
-                errorMessage = `Smart contract error: ${error.message}`
+            if (error.message.includes("Insufficient RIFF token balance")) {
+                errorMessage = error.message
+            } else if (error.message.includes("ERC20: insufficient allowance")) {
+                errorMessage = "Token approval failed. Please try using the 'Debug Token Approval' button (top-right corner) to manually approve your tokens."
+            } else if (error.message.includes("Token approval failed")) {
+                errorMessage = "Token approval failed. Please try using the 'Debug Token Approval' button (top-right corner) to manually approve your tokens."
             } else if (error.message.includes("Cannot stake on your own riff")) {
                 errorMessage = "You cannot stake on your own creations."
-            } else if (error.message.includes("User already has a stake")) {
-                errorMessage = "You already have a stake on this riff."
-            } else if (error.message.includes("Riff is not stakable")) {
-                errorMessage = "This riff is not available for staking."
-            } else if (error.message.includes("User not found")) {
-                errorMessage = "User profile not found. Please create a profile first."
-            } else if (error.message.includes("Riff not found")) {
-                errorMessage = "Riff not found. Please try again."
-            } else if (error.message.includes("amount")) {
-                errorMessage = "Invalid stake amount. Please enter a valid number."
+            } else if (error.message.includes("Amount is below minimum stake")) {
+                errorMessage = "Stake amount is below the minimum required amount (100,000 RIFF)."
             } else if (error.message.includes("insufficient funds")) {
                 errorMessage = "Insufficient RIFF tokens in your wallet for staking."
             } else if (error.message.includes("user rejected")) {
                 errorMessage = "Transaction was rejected by user."
+            } else if (error.message.includes("contract") || error.message.includes("transaction") || error.message.includes("gas")) {
+                errorMessage = `Smart contract error: ${error.message}`
             }
             
             toast({
@@ -688,6 +799,11 @@ export default function MarketPage() {
         } finally {
             setIsProcessing(false)
         }
+    }
+
+    // Add this near the end of the component, before the return statement
+    const handleShowApprovalDebugger = () => {
+        setShowApprovalDebugger(true)
     }
 
     return (
@@ -1748,11 +1864,20 @@ export default function MarketPage() {
                                                                         type="text"
                                                                         value={stakeAmount}
                                                                         onChange={handleStakeAmountChange}
-                                                                        className="bg-stone-800 border-orange-800/30 text-orange-100"
+                                                                        className={`bg-stone-800 border-orange-800/30 text-orange-100 ${
+                                                                            stakeAmount && !validateStakeAmount(stakeAmount, selectedRiff).valid 
+                                                                                ? 'border-red-500' 
+                                                                                : ''
+                                                                        }`}
                                                                     />
                                                                     <p className="text-xs text-orange-200/50">
-                                                                        Minimum stake: 100 RIFF • Maximum stake: 10,000 RIFF
+0                                                                        Minimum stake: 100,000 RIFF • Maximum stake: No limit
                                                                     </p>
+                                                                    {stakeAmount && !validateStakeAmount(stakeAmount, selectedRiff).valid && (
+                                                                        <p className="text-xs text-red-500">
+                                                                            {validateStakeAmount(stakeAmount, selectedRiff).error}
+                                                                        </p>
+                                                                    )}
                                                                 </div>
 
                                                                 <div className="bg-stone-800/50 p-4 rounded-lg space-y-3 border border-orange-800/20">
@@ -1900,7 +2025,6 @@ export default function MarketPage() {
                         </motion.div>
                     )}
                 </AnimatePresence>
-
             </div>
         </MainLayout>
     )
