@@ -1871,7 +1871,7 @@ export default function MarketPage() {
                                                                         }`}
                                                                     />
                                                                     <p className="text-xs text-orange-200/50">
-0                                                                        Minimum stake: 100,000 RIFF • Maximum stake: No limit
+0                                                                        Minimum stake: 100,000 RIFF • Maximum stake: 10,000,000
                                                                     </p>
                                                                     {stakeAmount && !validateStakeAmount(stakeAmount, selectedRiff).valid && (
                                                                         <p className="text-xs text-red-500">

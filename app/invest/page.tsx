@@ -963,8 +963,8 @@ export default function InvestPage() {
                                                                     }`}
                                                                 />
                                                                 <p className="text-xs text-zinc-500">
-                                                                    Minimum stake: 100,000 RIFF • Maximum stake:{" "}
-                                                                    {riff.maxPool - riff.stakedAmount} RIFF
+                                                                    Minimum stake: 100,000 RIFF • Maximum stake:{" "}10,000,000 RIFF
+                                                                    {/* {riff.maxPool - riff.stakedAmount} RIFF */}
                                                                 </p>
                                                                 {stakeAmount && !validateStakeAmount(stakeAmount, riff).valid && (
                                                                     <p className="text-xs text-red-500">
